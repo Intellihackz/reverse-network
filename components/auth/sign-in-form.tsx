@@ -10,7 +10,7 @@ import {
 
 import { cn } from "@/lib/utils";
 
-type Provider = "google" | "github";
+type Provider = "google";
 
 interface SignInViewProps {
   step: "start" | "code";
@@ -18,6 +18,8 @@ interface SignInViewProps {
   code: string;
   busy: boolean;
   error: string | null;
+  /** Progress message shown while a sign-in is finishing */
+  status?: string | null;
   disabled?: boolean;
   onEmailChange: (value: string) => void;
   onCodeChange: (value: string) => void;
@@ -52,14 +54,6 @@ function GoogleIcon() {
   );
 }
 
-function GithubIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-current">
-      <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.39-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z" />
-    </svg>
-  );
-}
-
 const socialButton =
   "flex w-full items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-6 py-3.5 text-base font-semibold text-zinc-950 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -69,6 +63,7 @@ function SignInView({
   code,
   busy,
   error,
+  status,
   disabled,
   onEmailChange,
   onCodeChange,
@@ -117,7 +112,11 @@ function SignInView({
           {busy ? "Verifying..." : "Verify and continue"}
         </button>
         <div className="flex items-center justify-between text-sm text-zinc-500">
-          <button type="button" onClick={onBack} className="hover:text-zinc-950">
+          <button
+            type="button"
+            onClick={onBack}
+            className="hover:text-zinc-950"
+          >
             Use a different email
           </button>
           <button
@@ -147,15 +146,6 @@ function SignInView({
         >
           <GoogleIcon />
           Continue with Google
-        </button>
-        <button
-          type="button"
-          disabled={locked}
-          onClick={() => onOAuth("github")}
-          className={socialButton}
-        >
-          <GithubIcon />
-          Continue with GitHub
         </button>
       </div>
 
@@ -196,6 +186,11 @@ function SignInView({
           {busy ? "Sending code..." : "Continue with email"}
         </button>
       </form>
+      {status && (
+        <p role="status" className="text-sm font-semibold text-zinc-700">
+          {status}
+        </p>
+      )}
       <p role="alert" className="min-h-5 text-sm text-red-600">
         {error}
       </p>
@@ -215,10 +210,24 @@ function PrivySignIn() {
   const onComplete = () => router.replace("/dashboard");
   const emailLogin = useLoginWithEmail({ onComplete });
   const oauthLogin = useLoginWithOAuth({ onComplete });
+  const oauthStatus = oauthLogin.state.status;
+  const oauthError =
+    oauthLogin.state.status === "error" ? oauthLogin.state.error : null;
 
   useEffect(() => {
-    if (ready && authenticated) router.replace("/dashboard");
+    if (!ready || !authenticated) return;
+    router.replace("/dashboard");
+    // If the soft navigation doesn't land (it can stall right after an OAuth redirect), reload into it
+    const fallback = setTimeout(
+      () => window.location.replace("/dashboard"),
+      1500,
+    );
+    return () => clearTimeout(fallback);
   }, [ready, authenticated, router]);
+
+  useEffect(() => {
+    if (oauthError) console.error("OAuth sign-in failed:", oauthError.message);
+  }, [oauthError]);
 
   async function run(task: () => Promise<void>, message: string) {
     setBusy(true);
@@ -237,8 +246,21 @@ function PrivySignIn() {
       step={step}
       email={email}
       code={code}
-      busy={busy || !ready}
-      error={error}
+      busy={busy || !ready || oauthStatus === "loading" || authenticated}
+      status={
+        authenticated
+          ? "Signed in. Opening your workspace..."
+          : oauthStatus === "loading"
+            ? "Finishing sign-in..."
+            : null
+      }
+      error={
+        error ??
+        (oauthStatus === "error"
+          ? "Sign-in with that provider didn't finish. " +
+            (oauthError?.message ?? "Please try again.")
+          : null)
+      }
       onEmailChange={(v) => {
         setEmail(v);
         setError(null);

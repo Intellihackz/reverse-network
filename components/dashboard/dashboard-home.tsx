@@ -14,13 +14,12 @@ import {
   type ProjectSummary,
   readLocalProjects,
 } from "@/lib/projects";
+import { useProjectsVersion } from "@/lib/projects-events";
 import { useProjectsApi } from "@/lib/use-projects-api";
 
 function firstName(user: ReturnType<typeof usePrivy>["user"]): string {
   const raw =
     user?.google?.name ??
-    user?.github?.name ??
-    user?.github?.username ??
     user?.email?.address.split("@")[0] ??
     user?.google?.email.split("@")[0] ??
     "";
@@ -55,6 +54,7 @@ export default function DashboardHome() {
   const userId = user?.id ?? "";
   const name = firstName(user);
   const api = useProjectsApi();
+  const version = useProjectsVersion();
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -88,7 +88,8 @@ export default function DashboardHome() {
     return () => {
       cancelled = true;
     };
-  }, [userId, api]);
+    // version: reload after any project change, even if this page was kept alive in the background
+  }, [userId, api, version]);
 
   async function removeProject(project: ProjectSummary) {
     if (

@@ -14,7 +14,7 @@ It does not copy the original app's screens. The app you download is a clean Nex
 ## Stack
 
 - Next.js 16 (App Router, Turbopack, `cacheComponents`), React 19, Tailwind CSS 4
-- [Privy](https://privy.io) for sign-in (email, Google, GitHub). The server verifies each token.
+- [Privy](https://privy.io) for sign-in (email and Google). The server verifies each token.
 - [Neon](https://neon.tech) Postgres with [Drizzle](https://orm.drizzle.team) for saved projects
 - `undici` with a guarded DNS lookup for fetching other people's sites
 - Optional: the Anthropic API for richer summaries. Without a key a built-in rule-based summary is used.
