@@ -36,7 +36,7 @@ export async function authenticate(request: Request): Promise<AuthResult> {
 
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return fail(401, "Sign in to analyze a protocol.");
+  if (!token) return fail(401, "Sign in to continue.");
 
   try {
     const { payload } = await jwtVerify(token, await verificationKey(pem), {

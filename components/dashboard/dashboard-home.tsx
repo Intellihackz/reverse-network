@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -9,11 +9,12 @@ import NewReverseForm from "@/components/dashboard/new-reverse-form";
 import ProjectList from "@/components/dashboard/project-list";
 import { SUPPORTED_CHAINS } from "@/lib/analyzer/chains";
 import {
-  deleteProject,
+  clearLocalProjects,
   exportAllProjects,
-  listProjects,
-  type Project,
+  type ProjectSummary,
+  readLocalProjects,
 } from "@/lib/projects";
+import { useProjectsApi } from "@/lib/use-projects-api";
 
 function firstName(user: ReturnType<typeof usePrivy>["user"]): string {
   const raw =
@@ -34,8 +35,8 @@ function greeting() {
   return "Good evening";
 }
 
-function downloadBackup(userId: string) {
-  const blob = new Blob([exportAllProjects(userId)], {
+function downloadBackup(json: string) {
+  const blob = new Blob([json], {
     type: "application/json",
   });
   const url = URL.createObjectURL(blob);
@@ -53,20 +54,69 @@ export default function DashboardHome() {
   const { user } = usePrivy();
   const userId = user?.id ?? "";
   const name = firstName(user);
-  // Only rendered after the sign-in gate, so reading storage never runs during SSR
-  const [projects, setProjects] = useState<Project[]>(() =>
-    userId ? listProjects(userId) : [],
-  );
+  const api = useProjectsApi();
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [importedCount, setImportedCount] = useState(0);
 
-  function removeProject(project: Project) {
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        // Projects saved in this browser before accounts had a database move over once
+        const local = readLocalProjects(userId);
+        if (local.length > 0) {
+          const added = await api.importLocal(local).catch(() => null);
+          if (added !== null) {
+            clearLocalProjects(userId);
+            if (!cancelled) setImportedCount(added);
+          }
+        }
+        const list = await api.list();
+        if (!cancelled) setProjects(list);
+      } catch (e) {
+        if (!cancelled)
+          setLoadError(
+            e instanceof Error ? e.message : "Couldn't load your projects.",
+          );
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, api]);
+
+  async function removeProject(project: ProjectSummary) {
     if (
       !window.confirm(
         `Delete ${project.brand.name || "this project"}? This can't be undone.`,
       )
     )
       return;
-    deleteProject(userId, project.id);
-    setProjects(listProjects(userId));
+    setActionError(null);
+    try {
+      await api.remove(project.id);
+      setProjects((list) => list?.filter((p) => p.id !== project.id) ?? list);
+    } catch (e) {
+      setActionError(
+        e instanceof Error ? e.message : "Couldn't delete that project.",
+      );
+    }
+  }
+
+  async function backup() {
+    setActionError(null);
+    try {
+      downloadBackup(exportAllProjects(await api.listFull()));
+    } catch (e) {
+      setActionError(
+        e instanceof Error ? e.message : "Couldn't prepare your backup.",
+      );
+    }
   }
 
   return (
@@ -107,7 +157,37 @@ export default function DashboardHome() {
             </Link>
           </div>
           <div className="mt-4">
-            <ProjectList projects={projects} onDelete={removeProject} />
+            {importedCount > 0 && (
+              <p
+                role="status"
+                className="mb-3 rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600"
+              >
+                Moved {importedCount} project{importedCount === 1 ? "" : "s"}{" "}
+                from this browser to your account.
+              </p>
+            )}
+            {actionError && (
+              <p role="alert" className="mb-3 text-sm text-red-600">
+                {actionError}
+              </p>
+            )}
+            {loadError ? (
+              <p
+                role="alert"
+                className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
+                {loadError}
+              </p>
+            ) : projects === null ? (
+              <p
+                role="status"
+                className="py-10 text-center text-sm text-zinc-500"
+              >
+                Loading your projects...
+              </p>
+            ) : (
+              <ProjectList projects={projects} onDelete={removeProject} />
+            )}
           </div>
         </section>
 
@@ -120,13 +200,13 @@ export default function DashboardHome() {
             Back up your work
           </h2>
           <p className="relative mt-2 max-w-[16rem] text-sm leading-relaxed text-white/65">
-            Projects are saved in this browser only. Download a copy so clearing
-            your browser doesn&apos;t take them with it.
+            Your projects are saved to your account. Download a copy of all of
+            them, including any file edits, to keep your own.
           </p>
           <button
             type="button"
-            onClick={() => downloadBackup(userId)}
-            disabled={projects.length === 0}
+            onClick={backup}
+            disabled={!projects || projects.length === 0}
             className="relative mt-auto w-fit rounded-full bg-white px-5 py-2.5 text-sm font-bold text-ink transition-colors enabled:hover:bg-signal disabled:cursor-not-allowed disabled:opacity-50"
           >
             Download backup

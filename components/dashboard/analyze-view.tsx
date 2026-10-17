@@ -7,18 +7,29 @@ import StageFrame from "@/components/project/stage-frame";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 
-import ScanStage, { type FoundItem, type Steps } from "@/components/dashboard/scan-stage";
-import type { AnalysisEvent, AnalysisResult, StepId } from "@/lib/analyzer/types";
-import { saveAnalysis } from "@/lib/projects";
+import ScanStage, {
+  type FoundItem,
+  type Steps,
+} from "@/components/dashboard/scan-stage";
+import type {
+  AnalysisEvent,
+  AnalysisResult,
+  StepId,
+} from "@/lib/analyzer/types";
+import { useProjectsApi } from "@/lib/use-projects-api";
 import { normalizeUrl } from "@/lib/url";
 
 const STEP_IDS: StepId[] = ["fetch", "scan", "chains", "abis", "summary"];
 
 const freshSteps = (): Steps =>
-  Object.fromEntries(STEP_IDS.map((id) => [id, { status: "pending" }])) as Steps;
+  Object.fromEntries(
+    STEP_IDS.map((id) => [id, { status: "pending" }]),
+  ) as Steps;
 
-const eyebrow = "font-mono text-xs uppercase tracking-[0.22em] text-ink/70 sm:text-sm";
-const alertBox = "mt-8 w-full max-w-xl rounded-2xl bg-white px-5 py-4 text-left shadow-lg";
+const eyebrow =
+  "font-mono text-xs uppercase tracking-[0.22em] text-ink/70 sm:text-sm";
+const alertBox =
+  "mt-8 w-full max-w-xl rounded-2xl bg-white px-5 py-4 text-left shadow-lg";
 const alertButton =
   "mt-3 rounded-full bg-ink px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-signal hover:text-ink";
 /**
@@ -29,6 +40,7 @@ export default function AnalyzeView() {
   const router = useRouter();
   const params = useSearchParams();
   const { getAccessToken, user } = usePrivy();
+  const api = useProjectsApi();
   const userId = user?.id ?? "";
   const target = normalizeUrl(params.get("url") ?? "");
 
@@ -37,7 +49,11 @@ export default function AnalyzeView() {
   const [found, setFound] = useState<FoundItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Set when the scan worked but the project could not be saved
-  const [unsaved, setUnsaved] = useState<AnalysisResult | null>(null);
+  const [unsaved, setUnsaved] = useState<{
+    result: AnalysisResult;
+    message: string;
+  } | null>(null);
+  const [retryingSave, setRetryingSave] = useState(false);
 
   useEffect(() => {
     if (!target || !userId) return;
@@ -66,7 +82,9 @@ export default function AnalyzeView() {
           return;
         }
         if (!res.ok || !res.body) {
-          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          const body = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
           setError(body?.error ?? "Something went wrong. Please try again.");
           return;
         }
@@ -75,6 +93,7 @@ export default function AnalyzeView() {
         const decoder = new TextDecoder();
         let buffer = "";
         let foundId = 0;
+        const pendingSaves: Promise<unknown>[] = [];
 
         const handle = (line: string) => {
           if (!line.trim()) return;
@@ -86,12 +105,30 @@ export default function AnalyzeView() {
             }));
           } else if (event.type === "found") {
             foundId += 1;
-            const item: FoundItem = { id: foundId, kind: event.kind, label: event.label };
+            const item: FoundItem = {
+              id: foundId,
+              kind: event.kind,
+              label: event.label,
+            };
             setFound((prev) => [...prev.slice(-29), item]);
           } else if (event.type === "result") {
-            const project = saveAnalysis(userId, event.data);
-            if (project) router.replace(`/project/review?project=${project.id}`);
-            else setUnsaved(event.data);
+            const result = event.data;
+            pendingSaves.push(
+              api
+                .saveScan(result)
+                .then((project) =>
+                  router.replace(`/project/review?project=${project.id}`),
+                )
+                .catch((e: unknown) =>
+                  setUnsaved({
+                    result,
+                    message:
+                      e instanceof Error
+                        ? e.message
+                        : "Couldn't save your project.",
+                  }),
+                ),
+            );
           } else {
             setError(event.message);
           }
@@ -106,6 +143,7 @@ export default function AnalyzeView() {
           lines.forEach(handle);
         }
         handle(buffer);
+        await Promise.all(pendingSaves);
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
           setError("The connection dropped. Please try again.");
@@ -119,14 +157,19 @@ export default function AnalyzeView() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [target, userId, attempt, getAccessToken, router]);
+  }, [target, userId, attempt, getAccessToken, router, api]);
 
   if (!target) {
     return (
       <StageFrame>
-        <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">No URL to reverse</h1>
+        <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">
+          No URL to reverse
+        </h1>
         <p className="mt-4 text-ink/75">Paste a web3 app URL to start.</p>
-        <Link href="/project/new" className={`${alertButton} mt-8 px-6 py-3 text-base`}>
+        <Link
+          href="/project/new"
+          className={`${alertButton} mt-8 px-6 py-3 text-base`}
+        >
           Start a project
         </Link>
       </StageFrame>
@@ -148,7 +191,11 @@ export default function AnalyzeView() {
       {error && (
         <div role="alert" className={alertBox}>
           <p className="font-semibold text-red-700">{error}</p>
-          <button type="button" onClick={() => setAttempt((n) => n + 1)} className={alertButton}>
+          <button
+            type="button"
+            onClick={() => setAttempt((n) => n + 1)}
+            className={alertButton}
+          >
             Try again
           </button>
         </div>
@@ -157,18 +204,30 @@ export default function AnalyzeView() {
       {unsaved && (
         <div role="alert" className={alertBox}>
           <p className="font-semibold text-red-700">
-            The scan worked, but your project couldn&apos;t be saved. Browser storage is full or
-            blocked.
+            The scan worked, but your project couldn&apos;t be saved.{" "}
+            {unsaved.message}
           </p>
           <button
             type="button"
+            disabled={retryingSave}
             onClick={() => {
-              const project = saveAnalysis(userId, unsaved);
-              if (project) router.replace(`/project/review?project=${project.id}`);
+              setRetryingSave(true);
+              api
+                .saveScan(unsaved.result)
+                .then((project) =>
+                  router.replace(`/project/review?project=${project.id}`),
+                )
+                .catch((e: unknown) =>
+                  setUnsaved({
+                    result: unsaved.result,
+                    message: e instanceof Error ? e.message : "Couldn't save.",
+                  }),
+                )
+                .finally(() => setRetryingSave(false));
             }}
             className={alertButton}
           >
-            Try saving again
+            {retryingSave ? "Saving..." : "Try saving again"}
           </button>
         </div>
       )}

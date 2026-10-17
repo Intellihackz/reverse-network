@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { usePrivy } from "@privy-io/react-auth";
 
 import { Segmented, SWATCHES } from "@/components/project/controls";
 import StageFrame from "@/components/project/stage-frame";
@@ -11,15 +10,16 @@ import {
   BRAND_LIMITS,
   type Brand,
   EVM_ADDRESS,
-  getProject,
   isLogoDataUrl,
   HEX_COLOR,
   paramKey,
   type FontStyle,
   type Radius,
   type Project,
-  saveProject,
 } from "@/lib/projects";
+import { useLoadedProject } from "@/components/project/use-loaded-project";
+import { useDebouncedSave } from "@/lib/use-debounced-save";
+import { useProjectsApi } from "@/lib/use-projects-api";
 import { cn } from "@/lib/utils";
 
 const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
@@ -79,50 +79,30 @@ function Accordion({
   );
 }
 
-function Review({ userId, projectId }: { userId: string; projectId: string }) {
+function Review({ initial }: { initial: Project }) {
   const router = useRouter();
-  const [project, setProject] = useState<Project | null>(() =>
-    getProject(userId, projectId),
-  );
+  const api = useProjectsApi();
+  const [project, setProject] = useState<Project>(initial);
   // Always the latest edit, so quick changes never overwrite each other
-  const latest = useRef<Project | null>(project);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const latest = useRef<Project>(initial);
+  const saver = useDebouncedSave((brand: Brand) =>
+    api.save(initial.id, { brand }),
+  );
   const [open, setOpen] = useState<string>("project");
   const [logoError, setLogoError] = useState<string | null>(null);
   const [feeText, setFeeText] = useState(() =>
-    project ? String(project.brand.feeBps / 100) : "0",
+    String(initial.brand.feeBps / 100),
   );
-
-  if (!project) {
-    return (
-      <StageFrame>
-        <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">
-          Project not found
-        </h1>
-        <p className="mt-4 max-w-md text-ink/75">
-          It may have been saved in a different browser. Projects stay in the
-          browser you created them in.
-        </p>
-        <Link
-          href="/project/new"
-          className="mt-8 rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors hover:bg-white hover:text-ink"
-        >
-          Start a project
-        </Link>
-      </StageFrame>
-    );
-  }
 
   const { brand, source } = project;
   const colorOk = HEX_COLOR.test(brand.primary);
 
   function update(patch: Partial<Brand>) {
     const base = latest.current;
-    if (!base) return;
     const next: Project = { ...base, brand: { ...base.brand, ...patch } };
     latest.current = next;
     setProject(next);
-    setSaveFailed(!saveProject(userId, next));
+    saver.schedule(next.brand);
   }
 
   const maxFee = BRAND_LIMITS.maxFeeBps / 100;
@@ -208,9 +188,9 @@ function Review({ userId, projectId }: { userId: string; projectId: string }) {
               your project.
             </p>
             <div className="mt-8 md:mt-auto">
-              {saveFailed && (
+              {saver.state === "failed" && (
                 <p role="alert" className="mb-3 text-sm text-red-600">
-                  Couldn&apos;t save: browser storage is full or blocked.
+                  Couldn&apos;t save your changes. {saver.error}
                 </p>
               )}
               <button
@@ -221,7 +201,11 @@ function Review({ userId, projectId }: { userId: string; projectId: string }) {
                   (hasFees && (feeInvalid || recipientInvalid)) ||
                   defaultsInvalid
                 }
-                onClick={() => router.push("/project/" + project.id)}
+                onClick={async () => {
+                  // Wait for the last edit to reach the server before opening the project
+                  if (await saver.flush())
+                    router.push("/project/" + project.id);
+                }}
                 className="w-full rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors enabled:hover:bg-signal enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Create project
@@ -618,27 +602,81 @@ function Review({ userId, projectId }: { userId: string; projectId: string }) {
 }
 
 /** Step between the scan and the full editor: confirm the basics of the new brand. */
-export default function ReviewBrand() {
-  const params = useSearchParams();
-  const { user } = usePrivy();
-  const projectId = params.get("project");
-
-  if (!projectId || !user) {
-    return (
-      <StageFrame>
-        <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">
-          Nothing to review
-        </h1>
-        <p className="mt-4 text-ink/75">Reverse a web3 app first.</p>
+function Notice({
+  title,
+  body,
+  cta,
+  href,
+}: {
+  title: string;
+  body?: string;
+  cta?: string;
+  href?: string;
+}) {
+  return (
+    <StageFrame>
+      <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">
+        {title}
+      </h1>
+      {body && <p className="mt-4 max-w-md text-ink/75">{body}</p>}
+      {cta && href && (
         <Link
-          href="/project/new"
+          href={href}
           className="mt-8 rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors hover:bg-white hover:text-ink"
         >
-          Start a project
+          {cta}
         </Link>
+      )}
+    </StageFrame>
+  );
+}
+
+function LoadReview({ projectId }: { projectId: string }) {
+  const state = useLoadedProject(projectId);
+  if (state.status === "loading") {
+    return (
+      <StageFrame>
+        <p role="status">Loading your project...</p>
       </StageFrame>
     );
   }
+  if (state.status === "missing") {
+    return (
+      <Notice
+        title="Project not found"
+        body="It may have been deleted."
+        cta="Start a project"
+        href="/project/new"
+      />
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <Notice
+        title="Couldn't load it"
+        body={state.message}
+        cta="Back to workspace"
+        href="/dashboard"
+      />
+    );
+  }
+  return <Review initial={state.project} />;
+}
 
-  return <Review key={projectId} userId={user.id} projectId={projectId} />;
+/** Step between the scan and the project page: confirm the basics of the new brand. */
+export default function ReviewBrand() {
+  const params = useSearchParams();
+  const projectId = params.get("project");
+
+  if (!projectId) {
+    return (
+      <Notice
+        title="Nothing to review"
+        body="Reverse a web3 app first."
+        cta="Start a project"
+        href="/project/new"
+      />
+    );
+  }
+  return <LoadReview key={projectId} projectId={projectId} />;
 }

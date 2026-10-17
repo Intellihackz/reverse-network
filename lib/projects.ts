@@ -60,6 +60,9 @@ export interface Findings {
   scriptsScanned: number;
 }
 
+/** What lists need: no findings or file edits, which can be large. */
+export type ProjectSummary = Pick<Project, "id" | "createdAt" | "updatedAt" | "source" | "brand">;
+
 export interface Project {
   id: string;
   createdAt: number;
@@ -112,7 +115,7 @@ function sanitizeDefaults(raw: unknown): Record<string, string> {
   return out;
 }
 
-function sanitizeEdits(raw: unknown): Record<string, string> {
+export function sanitizeEdits(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object") return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw).slice(0, EDIT_LIMITS.files)) {
@@ -121,7 +124,7 @@ function sanitizeEdits(raw: unknown): Record<string, string> {
   return out;
 }
 
-function sanitizeBrand(raw: unknown, fallback: Brand): Brand {
+export function sanitizeBrand(raw: unknown, fallback: Brand): Brand {
   const b = (raw && typeof raw === "object" ? raw : {}) as Partial<Brand>;
   const str = (v: unknown, max: number, d: string) =>
     typeof v === "string" ? v.slice(0, max) : d;
@@ -208,71 +211,84 @@ function sanitizeFindings(raw: unknown): Findings | null {
   };
 }
 
-function readAll(userId: string): Project[] {
+const clip = (v: unknown, max: number, d = ""): string => (typeof v === "string" ? v.slice(0, max) : d);
+
+/** Checks the parts of a source that come from outside (an import), and clamps their size. */
+export function sanitizeSource(raw: unknown): ProjectSource | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Partial<ProjectSource>;
+  if (typeof s.host !== "string" || s.host === "" || s.host.length > 253) return null;
+  const feeFeasibility = s.feeFeasibility;
+  return {
+    icon: cleanIcon(s.icon),
+    host: s.host,
+    url: clip(s.url, 2048),
+    name: clip(s.name, 120, s.host),
+    category: clip(s.category, 120),
+    oneLiner: clip(s.oneLiner, 400),
+    chains: Array.isArray(s.chains)
+      ? s.chains
+          .filter((c) => c && Number.isInteger(c.id) && typeof c.name === "string")
+          .slice(0, 20)
+          .map((c) => ({ id: c.id, name: c.name.slice(0, 60) }))
+      : [],
+    flows: Array.isArray(s.flows)
+      ? s.flows
+          .filter((f) => f && typeof f.title === "string" && typeof f.description === "string")
+          .slice(0, 8)
+          .map((f) => ({ title: f.title.slice(0, 160), description: f.description.slice(0, 600) }))
+      : [],
+    feeFeasibility:
+      feeFeasibility === "easy" || feeFeasibility === "moderate" || feeFeasibility === "hard" ? feeFeasibility : null,
+    feeNote: typeof s.feeNote === "string" ? s.feeNote.slice(0, 600) : null,
+  };
+}
+
+/** Rebuilds a project from untrusted data (an import), or returns null if it isn't one. */
+export function sanitizeProject(item: unknown): Project | null {
+  if (!item || typeof item !== "object") return null;
+  const p = item as Partial<Project>;
+  const source = sanitizeSource(p.source);
+  if (!source) return null;
+  return {
+    id: typeof p.id === "string" ? p.id : "",
+    createdAt: Number(p.createdAt) || Date.now(),
+    updatedAt: Number(p.updatedAt) || Date.now(),
+    source,
+    brand: sanitizeBrand(p.brand, defaultBrand(source)),
+    findings: sanitizeFindings(p.findings),
+    edits: sanitizeEdits(p.edits),
+  };
+}
+
+/** Projects saved in this browser before accounts had a database. Used once, to import them. */
+export function readLocalProjects(userId: string): Project[] {
   try {
     const raw = localStorage.getItem(storageKey(userId));
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.flatMap((item): Project[] => {
-      if (!item || typeof item !== "object") return [];
-      const p = item as Partial<Project>;
-      if (typeof p.id !== "string" || !p.source || typeof p.source !== "object") return [];
-      const source = { ...(p.source as ProjectSource), icon: cleanIcon((p.source as ProjectSource).icon) };
-      const fallback = defaultBrand(source);
-      return [
-        {
-          id: p.id,
-          createdAt: Number(p.createdAt) || Date.now(),
-          updatedAt: Number(p.updatedAt) || Date.now(),
-          source,
-          brand: sanitizeBrand(p.brand, fallback),
-          findings: sanitizeFindings(p.findings),
-          edits: sanitizeEdits(p.edits),
-        },
-      ];
-    });
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.flatMap((item) => {
+          const project = sanitizeProject(item);
+          return project ? [project] : [];
+        })
+      : [];
   } catch {
     return [];
   }
 }
 
-function writeAll(userId: string, projects: Project[]): boolean {
+export function clearLocalProjects(userId: string) {
   try {
-    localStorage.setItem(storageKey(userId), JSON.stringify(projects));
-    return true;
-  } catch {
-    return false;
-  }
+    localStorage.removeItem(storageKey(userId));
+  } catch {}
 }
 
-export function listProjects(userId: string): Project[] {
-  return readAll(userId).sort((a, b) => b.updatedAt - a.updatedAt);
+/** Everything given, as JSON, for a manual backup file. */
+export function exportAllProjects(projects: Project[]): string {
+  return JSON.stringify({ exportedAt: new Date().toISOString(), projects }, null, 2);
 }
 
-/** Everything saved for this user as JSON, for a manual backup file. */
-export function exportAllProjects(userId: string): string {
-  return JSON.stringify({ exportedAt: new Date().toISOString(), projects: readAll(userId) }, null, 2);
-}
-
-export function getProject(userId: string, id: string): Project | null {
-  return readAll(userId).find((p) => p.id === id) ?? null;
-}
-
-/** Returns false when the browser refused the write (storage full or blocked). */
-export function saveProject(userId: string, project: Project): boolean {
-  const all = readAll(userId).filter((p) => p.id !== project.id);
-  all.push({ ...project, updatedAt: Date.now() });
-  const kept = all.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, BRAND_LIMITS.maxProjects);
-  return writeAll(userId, kept);
-}
-
-export function deleteProject(userId: string, id: string): boolean {
-  return writeAll(userId, readAll(userId).filter((p) => p.id !== id));
-}
-
-function defaultBrand(source: ProjectSource): Brand {
+export function defaultBrand(source: ProjectSource): Brand {
   return {
     name: `My ${source.name}`.slice(0, BRAND_LIMITS.name),
     tagline: source.oneLiner.slice(0, BRAND_LIMITS.tagline),
@@ -329,28 +345,26 @@ function buildFindings(result: AnalysisResult): Findings {
 }
 
 /**
- * Saves an analysis as a project. Re-reversing an app you already have refreshes its
+ * Turns an analysis into a project. Re-reversing an app you already have refreshes its
  * findings and keeps your branding, instead of creating a duplicate.
  */
-export function saveAnalysis(userId: string, result: AnalysisResult): Project | null {
+export function mergeAnalysis(existing: Project | null, result: AnalysisResult): Project {
   const source = buildSource(result);
   const findings = buildFindings(result);
-  const existing = readAll(userId).find((p) => p.source.host === result.host);
 
   if (existing) {
     const available = new Set(source.chains.map((c) => c.id));
     const kept = existing.brand.chains.filter((id) => available.has(id));
-    const project: Project = {
+    return {
       ...existing,
       source,
       findings,
       brand: { ...existing.brand, chains: kept.length > 0 ? kept : source.chains.map((c) => c.id) },
     };
-    return saveProject(userId, project) ? project : null;
   }
 
-  const project: Project = {
-    id: crypto.randomUUID(),
+  return {
+    id: "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
     source,
@@ -358,7 +372,6 @@ export function saveAnalysis(userId: string, result: AnalysisResult): Project | 
     findings,
     edits: {},
   };
-  return saveProject(userId, project) ? project : null;
 }
 
 /** Picks black or white text for readability on a given background color. */

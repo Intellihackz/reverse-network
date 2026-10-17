@@ -1,21 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { usePrivy } from "@privy-io/react-auth";
 
 import { BrandMark } from "@/components/dashboard/branded-preview";
 import FindingsDrawer from "@/components/dashboard/findings-drawer";
 import StageFrame from "@/components/project/stage-frame";
+import { useLoadedProject } from "@/components/project/use-loaded-project";
 import { downloadBrandedApp } from "@/lib/export/download";
 import { generateFiles } from "@/lib/export/build-app";
-import {
-  EDIT_LIMITS,
-  getProject,
-  type Project,
-  saveProject,
-} from "@/lib/projects";
+import { EDIT_LIMITS, type Project } from "@/lib/projects";
+import { useDebouncedSave } from "@/lib/use-debounced-save";
+import { useProjectsApi } from "@/lib/use-projects-api";
 import { cn } from "@/lib/utils";
 
 interface TreeNode {
@@ -130,30 +127,21 @@ function TreeView({
 
 const DEFAULT_FILE = "reverse.config.json";
 
-function Workspace({
-  userId,
-  projectId,
-}: {
-  userId: string;
-  projectId: string;
-}) {
-  const [project, setProject] = useState<Project | null>(() =>
-    getProject(userId, projectId),
+function Workspace({ initial }: { initial: Project }) {
+  const api = useProjectsApi();
+  const [project, setProject] = useState<Project>(initial);
+  const latest = useRef<Project>(initial);
+  const saver = useDebouncedSave((edits: Record<string, string>) =>
+    api.save(initial.id, { edits }),
   );
-  const latest = useRef<Project | null>(project);
   const [open, setOpen] = useState<string[]>([DEFAULT_FILE]);
   const [active, setActive] = useState(DEFAULT_FILE);
-  const [dirty, setDirty] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
   const [showFindings, setShowFindings] = useState(false);
   const closeFindings = useCallback(() => setShowFindings(false), []);
   const gutter = useRef<HTMLPreElement>(null);
   const escaped = useRef(false);
 
-  const generated = useMemo(
-    () => (project ? generateFiles(project) : []),
-    [project],
-  );
+  const generated = useMemo(() => generateFiles(project), [project]);
   const base = useMemo(
     () => new Map(generated.map((f) => [f.path, f.content])),
     [generated],
@@ -162,42 +150,6 @@ function Workspace({
     () => buildTree(generated.map((f) => f.path)),
     [generated],
   );
-
-  // Edits are written shortly after typing stops, and once more when leaving the page
-  useEffect(() => {
-    if (!dirty) return;
-    const timer = setTimeout(() => {
-      if (latest.current) setSaveFailed(!saveProject(userId, latest.current));
-      setDirty(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [dirty, project, userId]);
-  useEffect(
-    () => () => {
-      if (latest.current) saveProject(userId, latest.current);
-    },
-    [userId],
-  );
-
-  if (!project) {
-    return (
-      <StageFrame>
-        <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">
-          Project not found
-        </h1>
-        <p className="mt-4 max-w-md text-ink/75">
-          It may have been saved in a different browser. Projects stay in the
-          browser you created them in.
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-8 rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors hover:bg-white hover:text-ink"
-        >
-          Back to workspace
-        </Link>
-      </StageFrame>
-    );
-  }
 
   const contentOf = (path: string) =>
     project.edits[path] ?? base.get(path) ?? "";
@@ -209,7 +161,6 @@ function Workspace({
 
   function setEdit(path: string, content: string) {
     const current = latest.current;
-    if (!current) return;
     const edits = { ...current.edits };
     if (content === base.get(path)) delete edits[path];
     else if (content.length <= EDIT_LIMITS.bytes) edits[path] = content;
@@ -217,7 +168,7 @@ function Workspace({
     const next = { ...current, edits };
     latest.current = next;
     setProject(next);
-    setDirty(true);
+    saver.schedule(edits);
   }
 
   function openFile(path: string) {
@@ -255,7 +206,11 @@ function Workspace({
             </svg>
             Workspace
           </Link>
-          <BrandMark brand={project.brand} size={32} icon={project.source.icon} />
+          <BrandMark
+            brand={project.brand}
+            size={32}
+            icon={project.source.icon}
+          />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold leading-tight">
               {slug}
@@ -419,13 +374,16 @@ function Workspace({
               )}
               <span
                 role="status"
-                className={cn("ml-auto", saveFailed && "text-red-400")}
+                className={cn(
+                  "ml-auto",
+                  saver.state === "failed" && "text-red-400",
+                )}
               >
-                {saveFailed
-                  ? "Couldn't save: browser storage is full or blocked."
-                  : dirty
+                {saver.state === "failed"
+                  ? "Couldn't save: " + saver.error
+                  : saver.state === "saving"
                     ? "Saving..."
-                    : "Saved in this browser"}
+                    : "Saved to your account"}
               </span>
             </div>
           </section>
@@ -435,9 +393,38 @@ function Workspace({
   );
 }
 
+function Load({ id }: { id: string }) {
+  const state = useLoadedProject(id);
+  if (state.status === "ready") return <Workspace initial={state.project} />;
+  return (
+    <StageFrame>
+      {state.status === "loading" ? (
+        <p role="status">Loading your project...</p>
+      ) : (
+        <>
+          <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">
+            {state.status === "missing"
+              ? "Project not found"
+              : "Couldn't load it"}
+          </h1>
+          <p className="mt-4 max-w-md text-ink/75">
+            {state.status === "missing"
+              ? "It may have been deleted."
+              : state.message}
+          </p>
+          <Link
+            href="/dashboard"
+            className="mt-8 rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors hover:bg-white hover:text-ink"
+          >
+            Back to workspace
+          </Link>
+        </>
+      )}
+    </StageFrame>
+  );
+}
+
 export default function ProjectWorkspace() {
   const params = useParams<{ id: string }>();
-  const { user } = usePrivy();
-  if (!user) return null;
-  return <Workspace key={params.id} userId={user.id} projectId={params.id} />;
+  return <Load key={params.id} id={params.id} />;
 }
