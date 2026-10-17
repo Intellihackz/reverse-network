@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Brand palette */
+  --color-ink: #0e0e10; /* text, primary buttons, the logo */
+  --color-paper: #ffffff; /* page background */
+  --color-bone: #f4f2ee; /* warm panels and soft surfaces */
+  --color-graphite: #5b5b63; /* secondary text */
+  --color-signal: #ff5a1f; /* the one accent: highlights, hover, scanning */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Headlines use the display face; utilities such as font-mono still win */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection and keyboard focus use the accent */
+::selection {
+  background: var(--color-signal);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}
+
+/* Scanning stage on the analyze page */
+@keyframes scan-sweep {
+  from { top: 0%; }
+  to { top: 100%; }
+}
+
+@keyframes chip-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes bar-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.scan-beam {
+  animation: scan-sweep 2.6s ease-in-out infinite alternate;
+}
+
+.chip-in {
+  animation: chip-in 0.35s ease-out both;
+}
+
+.bar-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.bar-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: bar-shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-beam { animation: none; top: 50%; }
+  .chip-in { animation: none; }
+  .bar-shimmer::after { animation: none; display: none; }
 }
