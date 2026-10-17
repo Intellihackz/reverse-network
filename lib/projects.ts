@@ -200,6 +200,11 @@ export function listProjects(userId: string): Project[] {
   return readAll(userId).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/** Everything saved for this user as JSON, for a manual backup file. */
+export function exportAllProjects(userId: string): string {
+  return JSON.stringify({ exportedAt: new Date().toISOString(), projects: readAll(userId) }, null, 2);
+}
+
 export function getProject(userId: string, id: string): Project | null {
   return readAll(userId).find((p) => p.id === id) ?? null;
 }

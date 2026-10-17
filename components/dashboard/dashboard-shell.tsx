@@ -10,8 +10,9 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLogout, usePrivy } from "@privy-io/react-auth";
-import LogoMark from "@/components/logo-mark";
 
+import LogoMark from "@/components/logo-mark";
+import { useSidebarCollapsed } from "@/lib/use-sidebar-collapsed";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -22,6 +23,11 @@ interface NavItem {
   soon?: boolean;
 }
 
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
 const iconProps = {
   "aria-hidden": true,
   viewBox: "0 0 24 24",
@@ -30,63 +36,78 @@ const iconProps = {
   strokeLinejoin: "round" as const,
 };
 
-const NAV: NavItem[] = [
+const NAV: NavGroup[] = [
   {
-    label: "Home",
-    href: "/dashboard",
-    icon: (
-      <svg {...iconProps}>
-        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1.5" />
-      </svg>
-    ),
+    label: "Workspace",
+    items: [
+      {
+        label: "Home",
+        href: "/dashboard",
+        icon: (
+          <svg {...iconProps}>
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </svg>
+        ),
+      },
+      {
+        label: "Protocols",
+        href: "/dashboard/protocols",
+        soon: true,
+        icon: (
+          <svg {...iconProps}>
+            <path d="M12 3 3 8l9 5 9-5-9-5Z" />
+            <path d="m3 13 9 5 9-5" />
+          </svg>
+        ),
+      },
+    ],
   },
   {
-    label: "Protocols",
-    href: "/dashboard/protocols",
-    soon: true,
-    icon: (
-      <svg {...iconProps}>
-        <path d="M12 3 3 8l9 5 9-5-9-5Z" />
-        <path d="m3 13 9 5 9-5" />
-      </svg>
-    ),
+    label: "Ship",
+    items: [
+      {
+        label: "Deployments",
+        href: "/dashboard/deployments",
+        soon: true,
+        icon: (
+          <svg {...iconProps}>
+            <path d="M12 3c3 2 5 5 5 9l-2 4H9l-2-4c0-4 2-7 5-9Z" />
+            <path d="M9 16v3m6-3v3" />
+          </svg>
+        ),
+      },
+    ],
   },
   {
-    label: "Deployments",
-    href: "/dashboard/deployments",
-    soon: true,
-    icon: (
-      <svg {...iconProps}>
-        <path d="M12 3c3 2 5 5 5 9l-2 4H9l-2-4c0-4 2-7 5-9Z" />
-        <path d="M9 16v3m6-3v3" />
-      </svg>
-    ),
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    soon: true,
-    icon: (
-      <svg {...iconProps}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />
-      </svg>
-    ),
+    label: "Account",
+    items: [
+      {
+        label: "Settings",
+        href: "/dashboard/settings",
+        soon: true,
+        icon: (
+          <svg {...iconProps}>
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />
+          </svg>
+        ),
+      },
+    ],
   },
 ];
 
-function Logo() {
+function Logo({ compact }: { compact?: boolean }) {
   return (
     <Link
       href="/"
       aria-label="Reverse Network home"
       className="flex items-center gap-2.5 font-display text-lg font-extrabold tracking-[-0.08em] [word-spacing:0.22em]"
     >
-      <LogoMark className="h-6 w-auto" />
-      REVERSE NETWORK
+      <LogoMark className="h-7 w-auto shrink-0" />
+      {!compact && "REVERSE NETWORK"}
     </Link>
   );
 }
@@ -95,6 +116,9 @@ interface SidebarProps {
   identity: string | null;
   pathname: string;
   signOutFailed: boolean;
+  /** Icon-only mode, desktop sidebar only */
+  collapsed: boolean;
+  onToggleCollapse?: () => void;
   onNavigate: () => void;
   onSignOut: () => void;
 }
@@ -103,80 +127,155 @@ function SidebarContent({
   identity,
   pathname,
   signOutFailed,
+  collapsed,
+  onToggleCollapse,
   onNavigate,
   onSignOut,
 }: SidebarProps) {
+  const initial = identity?.replace(/^@/, "").charAt(0) || "?";
+
   return (
     <div className="flex h-full flex-col">
-      <div className="px-6 pb-6 pt-7">
-        <Logo />
+      <div
+        className={cn(
+          "flex items-center pb-5 pt-5",
+          collapsed ? "flex-col gap-4 px-3" : "justify-between px-4",
+        )}
+      >
+        <Logo compact={collapsed} />
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-pressed={collapsed}
+            className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-white hover:text-ink"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className={cn("h-5 w-5 fill-none stroke-current stroke-2 transition-transform", collapsed && "rotate-180")}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <path d="M9 4v16" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      <nav aria-label="Dashboard" className="flex-1 px-3">
-        <ul className="space-y-1">
-          {NAV.map((item) => {
-            const active = pathname === item.href;
-            const base =
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold";
+      <nav aria-label="Dashboard" className={cn("flex-1 space-y-5 overflow-y-auto", collapsed ? "px-3" : "px-3")}>
+        {NAV.map((group) => (
+          <div key={group.label}>
+            {collapsed ? (
+              <div aria-hidden="true" className="mx-2 mb-2 h-px bg-zinc-300/60" />
+            ) : (
+              <p className="px-3 pb-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-400">
+                {group.label}
+              </p>
+            )}
+            <ul className="space-y-1">
+              {group.items.map((item) => {
+                const active = pathname === item.href;
+                const base = cn(
+                  "flex items-center rounded-xl py-2.5 text-sm font-semibold",
+                  collapsed ? "justify-center px-0" : "gap-3 px-3",
+                );
 
-            return (
-              <li key={item.label}>
-                {item.soon ? (
-                  <span
-                    aria-disabled="true"
-                    className={cn(base, "cursor-not-allowed text-zinc-400")}
-                  >
-                    {item.icon}
-                    {item.label}
-                    <span className="ml-auto rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-500">
-                      Soon
-                    </span>
-                  </span>
-                ) : (
-                  <Link
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      base,
-                      "transition-colors",
-                      active
-                        ? "bg-zinc-950 text-white"
-                        : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950",
+                return (
+                  <li key={item.label}>
+                    {item.soon ? (
+                      <span
+                        aria-disabled="true"
+                        title={collapsed ? `${item.label} (soon)` : undefined}
+                        className={cn(base, "cursor-not-allowed text-zinc-400")}
+                      >
+                        {item.icon}
+                        {collapsed ? (
+                          <span className="sr-only">{item.label}, coming soon</span>
+                        ) : (
+                          <>
+                            {item.label}
+                            <span className="ml-auto rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-zinc-500">
+                              Soon
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        onClick={onNavigate}
+                        title={collapsed ? item.label : undefined}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          base,
+                          "transition-colors",
+                          active
+                            ? "bg-white text-ink shadow-sm ring-1 ring-black/5"
+                            : "text-zinc-600 hover:bg-white/70 hover:text-ink",
+                        )}
+                      >
+                        <span className={active ? "text-signal" : undefined}>{item.icon}</span>
+                        {collapsed ? <span className="sr-only">{item.label}</span> : item.label}
+                      </Link>
                     )}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </Link>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       {identity && (
-        <div className="border-t border-zinc-200 p-4">
-          <div className="flex items-center gap-3 px-2 pb-3">
-            <span
-              aria-hidden="true"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-bold uppercase text-white"
-            >
-              {identity.replace(/^@/, "").charAt(0) || "?"}
-            </span>
-            <p className="min-w-0 truncate text-sm font-medium text-zinc-700">
-              {identity}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="w-full rounded-full border-2 border-zinc-950 px-5 py-2 text-sm font-bold transition-colors hover:bg-zinc-950/5"
-          >
-            Sign out
-          </button>
+        <div className={cn("p-3", collapsed && "flex flex-col items-center gap-2")}>
+          {collapsed ? (
+            <>
+              <span
+                title={identity}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-sm font-bold uppercase text-white"
+              >
+                {initial}
+              </span>
+              <button
+                type="button"
+                onClick={onSignOut}
+                aria-label="Sign out"
+                title="Sign out"
+                className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-white hover:text-ink"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-bold uppercase text-white"
+                >
+                  {initial}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">{identity}</p>
+                  <p className="text-xs text-zinc-500">Personal workspace</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="mt-3 w-full rounded-xl bg-bone px-4 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-signal hover:text-ink"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
           {signOutFailed && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
+            <p role="alert" className="mt-2 px-1 text-sm text-red-600">
               We couldn&apos;t sign you out. Please try again.
             </p>
           )}
@@ -202,6 +301,7 @@ export function ShellView({
 }: ShellViewProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -212,23 +312,30 @@ export function ShellView({
     return () => document.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
-  const sidebar = (
-    <SidebarContent
-      identity={identity}
-      pathname={pathname}
-      signOutFailed={signOutFailed}
-      onNavigate={() => setDrawerOpen(false)}
-      onSignOut={onSignOut}
-    />
-  );
+  const sidebarProps = {
+    identity,
+    pathname,
+    signOutFailed,
+    onNavigate: () => setDrawerOpen(false),
+    onSignOut,
+  };
 
   return (
-    <div className="min-h-screen bg-white text-zinc-950 md:grid md:grid-cols-[16rem_1fr]">
-      <aside className="sticky top-0 hidden h-screen border-r border-zinc-200 bg-white md:block">
-        {sidebar}
+    <div
+      className={cn(
+        "min-h-screen bg-white text-ink md:grid md:gap-3 md:bg-bone md:p-3 md:transition-[grid-template-columns] md:duration-200",
+        collapsed ? "md:grid-cols-[4.5rem_minmax(0,1fr)]" : "md:grid-cols-[16.5rem_minmax(0,1fr)]",
+      )}
+    >
+      <aside className="sticky top-3 hidden h-[calc(100vh-1.5rem)] md:block">
+        <SidebarContent
+          {...sidebarProps}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed(!collapsed)}
+        />
       </aside>
 
-      <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 md:hidden">
+      <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 md:hidden">
         <Logo />
         <button
           type="button"
@@ -260,14 +367,14 @@ export function ShellView({
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl"
+            className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-bone shadow-xl"
           >
-            {sidebar}
+            <SidebarContent {...sidebarProps} collapsed={false} />
           </aside>
         </div>
       )}
 
-      <main className="flex min-w-0 flex-col px-6 py-8 sm:px-10 md:px-12 md:pb-12 md:pt-7">
+      <main className="flex min-w-0 flex-col bg-white px-5 py-8 sm:px-8 md:min-h-[calc(100vh-1.5rem)] md:rounded-3xl md:border md:border-zinc-200/70 md:px-10 md:py-10">
         {children}
       </main>
     </div>
