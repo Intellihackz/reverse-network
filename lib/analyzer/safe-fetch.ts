@@ -108,6 +108,7 @@ export interface FetchedText {
   status: number;
   contentType: string;
   text: string;
+  bytes: Buffer;
   truncated: boolean;
 }
 
@@ -164,11 +165,13 @@ export async function safeFetchText(
       }
     }
 
+    const bytes = Buffer.concat(chunks);
     return {
       url: current.toString(),
       status: res.status,
       contentType: res.headers.get("content-type") ?? "",
-      text: Buffer.concat(chunks).toString("utf8"),
+      text: bytes.toString("utf8"),
+      bytes,
       truncated,
     };
   }

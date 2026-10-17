@@ -57,6 +57,8 @@ export interface AnalysisResult {
   url: string;
   host: string;
   title: string | null;
+  /** The site's own icon as a data URL */
+  icon: string | null;
   libraries: string[];
   scriptsScanned: number;
   addressesFound: number;

@@ -31,11 +31,13 @@ const PALETTE = {
   dark: { bg: "#0b0b0d", surface: "#17171a", text: "#fafafa", muted: "#a1a1aa", line: "#27272a" },
 } as const;
 
-export function BrandMark({ brand, size }: { brand: Brand; size: number }) {
+/** The brand logo, else the source site's icon if given, else a letter. */
+export function BrandMark({ brand, size, icon }: { brand: Brand; size: number; icon?: string | null }) {
   const fg = readableTextOn(brand.primary);
-  if (brand.logo) {
+  const image = brand.logo ?? icon;
+  if (image) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={brand.logo} alt="" width={size} height={size} style={{ width: size, height: size, objectFit: "contain" }} />;
+    return <img src={image} alt="" width={size} height={size} style={{ width: size, height: size, objectFit: "contain" }} />;
   }
   return (
     <span

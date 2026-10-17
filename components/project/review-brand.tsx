@@ -5,21 +5,24 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 
-import { Segmented, SWATCHES } from "@/components/dashboard/customize-view";
+import { Segmented, SWATCHES } from "@/components/project/controls";
 import StageFrame from "@/components/project/stage-frame";
 import {
   BRAND_LIMITS,
   type Brand,
   EVM_ADDRESS,
   getProject,
+  isLogoDataUrl,
   HEX_COLOR,
   paramKey,
   type FontStyle,
+  type Radius,
   type Project,
   saveProject,
 } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const label = "block text-sm font-medium text-zinc-700";
 const input =
   "mt-2 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-base text-ink outline-none placeholder:text-zinc-400 focus:border-ink";
@@ -76,13 +79,7 @@ function Accordion({
   );
 }
 
-function Review({
-  userId,
-  projectId,
-}: {
-  userId: string;
-  projectId: string;
-}) {
+function Review({ userId, projectId }: { userId: string; projectId: string }) {
   const router = useRouter();
   const [project, setProject] = useState<Project | null>(() =>
     getProject(userId, projectId),
@@ -91,6 +88,7 @@ function Review({
   const latest = useRef<Project | null>(project);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<string>("project");
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [feeText, setFeeText] = useState(() =>
     project ? String(project.brand.feeBps / 100) : "0",
   );
@@ -142,6 +140,29 @@ function Review({
     const n = Number(text);
     if (text.trim() !== "" && Number.isFinite(n) && n >= 0 && n <= maxFee)
       update({ feeBps: Math.round(n * 100) });
+  }
+
+  function onLogo(file: File | undefined) {
+    setLogoError(null);
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) {
+      setLogoError("Use a PNG, JPEG, WebP or SVG image.");
+      return;
+    }
+    if (file.size > BRAND_LIMITS.logoBytes) {
+      setLogoError(
+        "Keep the logo under " + BRAND_LIMITS.logoBytes / 1024 + " KB.",
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (isLogoDataUrl(result)) update({ logo: result });
+      else setLogoError("That image couldn't be read.");
+    };
+    reader.onerror = () => setLogoError("That image couldn't be read.");
+    reader.readAsDataURL(file);
   }
 
   function setDefault(key: string, value: string) {
@@ -256,6 +277,41 @@ function Review({
                 />
               </div>
               <div>
+                <label htmlFor="review-logo" className={label}>
+                  Logo
+                </label>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    id="review-logo"
+                    type="file"
+                    accept={LOGO_TYPES.join(",")}
+                    onChange={(e) => {
+                      onLogo(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                    className="min-w-0 flex-1 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-ink file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                  />
+                  {brand.logo && (
+                    <button
+                      type="button"
+                      onClick={() => update({ logo: null })}
+                      className="shrink-0 text-sm font-semibold text-zinc-500 hover:text-ink"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Square works best, up to {BRAND_LIMITS.logoBytes / 1024} KB.
+                  Without one we use your first letter.
+                </p>
+                {logoError && (
+                  <p role="alert" className="mt-1 text-sm text-red-600">
+                    {logoError}
+                  </p>
+                )}
+              </div>
+              <div>
                 <p className={label}>Category</p>
                 <p className="mt-2 rounded-2xl bg-zinc-50 px-4 py-3 text-base text-zinc-600">
                   {source.category}
@@ -321,10 +377,10 @@ function Review({
 
             <Accordion
               id="look"
-              title="Typography"
+              title="Style"
               hint={
                 <span className="capitalize">
-                  {brand.font} &middot; {brand.theme}
+                  {brand.font} &middot; {brand.theme} &middot; {brand.radius}
                 </span>
               }
               open={open === "look"}
@@ -349,7 +405,64 @@ function Review({
                 ]}
                 onChange={(theme) => update({ theme })}
               />
+              <Segmented<Radius>
+                legend="Corners"
+                value={brand.radius}
+                options={[
+                  { value: "sharp", label: "Sharp" },
+                  { value: "rounded", label: "Rounded" },
+                  { value: "pill", label: "Pill" },
+                ]}
+                onChange={(radius) => update({ radius })}
+              />
             </Accordion>
+
+            {source.chains.length > 0 && (
+              <Accordion
+                id="chains"
+                title="Networks"
+                hint={
+                  <span>
+                    {brand.chains.length} of {source.chains.length}
+                  </span>
+                }
+                open={open === "chains"}
+                onToggle={() => toggle("chains")}
+              >
+                <fieldset>
+                  <legend className="sr-only">Supported networks</legend>
+                  <ul className="space-y-2">
+                    {source.chains.map((chain) => {
+                      const checked = brand.chains.includes(chain.id);
+                      const onlyOne = checked && brand.chains.length === 1;
+                      return (
+                        <li key={chain.id}>
+                          <label className="flex items-center gap-3 text-base">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={onlyOne}
+                              onChange={() =>
+                                update({
+                                  chains: checked
+                                    ? brand.chains.filter((c) => c !== chain.id)
+                                    : [...brand.chains, chain.id],
+                                })
+                              }
+                              className="h-5 w-5 accent-ink"
+                            />
+                            {chain.name}
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Keep at least one network.
+                  </p>
+                </fieldset>
+              </Accordion>
+            )}
 
             {hasFees && (
               <Accordion

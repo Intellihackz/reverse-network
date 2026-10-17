@@ -1,3 +1,4 @@
+import { fetchSiteIcon } from "./icon";
 import { describeContracts, findDeployedContracts, rankContracts } from "./contracts";
 import { fetchPage, scanApp } from "./extract";
 import { summarizeByRules } from "./heuristics";
@@ -71,6 +72,8 @@ async function runPipeline(
     const page = await fetchPage(target.toString(), signal);
     const host = new URL(page.finalUrl).hostname;
     emit({ type: "step", id: "fetch", status: "done", detail: page.title ?? host });
+    // Fetched alongside the scan; a missing icon never stops it
+    const iconPromise = fetchSiteIcon(page.html, page.finalUrl, signal).catch(() => null);
 
     emit({ type: "step", id: "scan", status: "running" });
     const scan = await scanApp(page, signal, (file) => found("file", file));
@@ -157,6 +160,7 @@ async function runPipeline(
         url: page.finalUrl,
         host,
         title: page.title,
+        icon: await iconPromise,
         libraries: scan.libraries,
         scriptsScanned: scan.scriptsScanned,
         addressesFound: scan.addresses.length,

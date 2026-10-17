@@ -26,6 +26,8 @@ export interface Brand {
 }
 
 export interface ProjectSource {
+  /** The site's own icon as a data URL, when we could read one */
+  icon?: string | null;
   host: string;
   url: string;
   name: string;
@@ -88,6 +90,11 @@ export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 export const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const LOGO_DATA_URL = /^data:image\/(?:png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
 export const isLogoDataUrl = (v: string) => LOGO_DATA_URL.test(v);
+const SITE_ICON = /^data:image\/(?:png|jpeg|webp|gif|svg\+xml|x-icon);base64,[A-Za-z0-9+/=]+$/;
+const MAX_ICON_CHARS = Math.ceil((64 * 1024 * 4) / 3) + 100;
+const cleanIcon = (v: unknown) =>
+  typeof v === "string" && v.length <= MAX_ICON_CHARS && SITE_ICON.test(v) ? v : null;
+
 const MAX_STORED_LOGO_CHARS = Math.ceil((BRAND_LIMITS.logoBytes * 4) / 3) + 100;
 
 const storageKey = (userId: string) => `reverse:projects:v1:${userId}`;
@@ -212,7 +219,7 @@ function readAll(userId: string): Project[] {
       if (!item || typeof item !== "object") return [];
       const p = item as Partial<Project>;
       if (typeof p.id !== "string" || !p.source || typeof p.source !== "object") return [];
-      const source = p.source as ProjectSource;
+      const source = { ...(p.source as ProjectSource), icon: cleanIcon((p.source as ProjectSource).icon) };
       const fallback = defaultBrand(source);
       return [
         {
@@ -286,6 +293,7 @@ function buildSource(result: AnalysisResult): ProjectSource {
   const feeOption = summary?.customization.find((c) => /fee|referral/i.test(c.option));
 
   return {
+    icon: cleanIcon(result.icon),
     host: result.host,
     url: result.url,
     name: summary?.name ?? result.title ?? result.host,

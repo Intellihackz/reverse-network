@@ -38,7 +38,7 @@ export default function ProjectList({
     <ul className="divide-y divide-zinc-100">
       {projects.map((project) => (
         <li key={project.id} className="flex items-center gap-3 py-3.5">
-          <BrandMark brand={project.brand} size={40} />
+          <BrandMark brand={project.brand} size={40} icon={project.source.icon} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{project.brand.name || "Untitled"}</p>
             <p className="truncate text-sm text-zinc-500">
