@@ -23,8 +23,17 @@ function readPendingUrl(): string {
   }
 }
 
+interface NewReverseFormProps {
+  /** "stage" is for sitting on the orange full-screen page */
+  variant?: "default" | "stage";
+  autoFocus?: boolean;
+}
+
 // Only rendered once the sign-in gate has passed, so reading storage never runs during SSR
-export default function NewReverseForm() {
+export default function NewReverseForm({
+  variant = "default",
+  autoFocus = false,
+}: NewReverseFormProps) {
   const router = useRouter();
   const reducedMotion = usePrefersReducedMotion();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +51,7 @@ export default function NewReverseForm() {
     try {
       sessionStorage.removeItem(PENDING_URL_KEY);
     } catch {}
-    router.push(`/dashboard/analyze?url=${encodeURIComponent(url)}`);
+    router.push(`/project/analyze?url=${encodeURIComponent(url)}`);
   }
 
   function fillExample(host: string) {
@@ -63,7 +72,7 @@ export default function NewReverseForm() {
       </label>
       <BorderBeam
         size="md"
-        colorVariant="sunset"
+        colorVariant={variant === "stage" ? "mono" : "sunset"}
         theme="light"
         strength={0.7}
         borderRadius={28}
@@ -95,6 +104,7 @@ export default function NewReverseForm() {
               }}
               aria-invalid={invalid}
               aria-describedby="new-reverse-hint"
+              autoFocus={autoFocus}
               className="min-w-0 flex-1 bg-transparent py-2 font-mono text-base text-ink outline-none placeholder:text-zinc-400 sm:text-lg"
             />
           </div>
@@ -129,7 +139,13 @@ export default function NewReverseForm() {
         className={cn(
           "text-center text-sm empty:hidden",
           (invalid || prefilled) && "mt-3",
-          invalid ? "text-red-600" : "text-zinc-500",
+          invalid
+            ? variant === "stage"
+              ? "font-semibold text-ink"
+              : "text-red-600"
+            : variant === "stage"
+              ? "text-ink/70"
+              : "text-zinc-500",
         )}
       >
         {invalid && "Enter a valid web3 app URL, like app.uniswap.org."}

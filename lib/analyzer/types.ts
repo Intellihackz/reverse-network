@@ -8,6 +8,15 @@ export interface FunctionInfo {
   stateMutability: string;
 }
 
+/** A function input that looks like a setting you could brand: a payout address or a fee. */
+export interface ContractParam {
+  function: string;
+  param: string;
+  type: string;
+  /** payout: where a fee or referral goes. recipient: who receives an action's output. */
+  kind: "payout" | "recipient" | "fee";
+}
+
 export interface ContractInfo {
   address: string;
   chainId: number;
@@ -19,6 +28,7 @@ export interface ContractInfo {
   kind: "token" | "proxy" | "contract";
   implementation: { address: string; name: string | null } | null;
   functions: FunctionInfo[];
+  params: ContractParam[];
   eventCount: number;
 }
 

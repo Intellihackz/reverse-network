@@ -1,4 +1,4 @@
-import type { AnalysisResult, ProtocolSummary } from "@/lib/analyzer/types";
+import type { AnalysisResult, ContractParam, ProtocolSummary } from "@/lib/analyzer/types";
 
 /**
  * Projects live in this browser's localStorage, keyed by user. They do not sync
@@ -21,6 +21,8 @@ export interface Brand {
   chains: number[];
   feeRecipient: string;
   feeBps: number;
+  /** Values to prefill in the generated app's forms, keyed by paramKey() */
+  paramDefaults: Record<string, string>;
 }
 
 export interface ProjectSource {
@@ -43,6 +45,8 @@ export interface FindingsContract {
   chainId: number;
   chainName: string;
   address: string;
+  /** Missing on projects saved before settings were detected */
+  params?: ContractParam[];
 }
 
 export interface Findings {
@@ -62,7 +66,11 @@ export interface Project {
   brand: Brand;
   /** Missing on projects saved before findings were stored */
   findings: Findings | null;
+  /** Files the user changed in the project editor, by path. Overrides the generated version. */
+  edits: Record<string, string>;
 }
+
+export const EDIT_LIMITS = { files: 80, bytes: 200_000, pathChars: 200 } as const;
 
 export const BRAND_LIMITS = {
   name: 40,
@@ -71,6 +79,10 @@ export const BRAND_LIMITS = {
   maxFeeBps: 500,
   maxProjects: 50,
 } as const;
+
+/** Identifies one input of one function of one contract. */
+export const paramKey = (chainId: number, address: string, fn: string, param: string) =>
+  `${chainId}:${address.toLowerCase()}:${fn}:${param}`;
 
 export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 export const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -83,6 +95,24 @@ const storageKey = (userId: string) => `reverse:projects:v1:${userId}`;
 const THEMES: Theme[] = ["light", "dark"];
 const RADII: Radius[] = ["sharp", "rounded", "pill"];
 const FONTS: FontStyle[] = ["sans", "serif", "mono"];
+
+function sanitizeDefaults(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw).slice(0, 200)) {
+    if (typeof v === "string" && k.length <= 200) out[k] = v.slice(0, 300);
+  }
+  return out;
+}
+
+function sanitizeEdits(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw).slice(0, EDIT_LIMITS.files)) {
+    if (typeof v === "string" && k.length <= EDIT_LIMITS.pathChars && v.length <= EDIT_LIMITS.bytes) out[k] = v;
+  }
+  return out;
+}
 
 function sanitizeBrand(raw: unknown, fallback: Brand): Brand {
   const b = (raw && typeof raw === "object" ? raw : {}) as Partial<Brand>;
@@ -106,6 +136,7 @@ function sanitizeBrand(raw: unknown, fallback: Brand): Brand {
       Number.isInteger(b.feeBps) && (b.feeBps as number) >= 0 && (b.feeBps as number) <= BRAND_LIMITS.maxFeeBps
         ? (b.feeBps as number)
         : 0,
+    paramDefaults: sanitizeDefaults(b.paramDefaults),
   };
 }
 
@@ -146,7 +177,19 @@ function sanitizeFindings(raw: unknown): Findings | null {
       Number.isInteger(c.chainId) &&
       typeof c.verified === "boolean" &&
       ["token", "proxy", "contract"].includes(c.kind),
-  );
+  ).map((c) => ({
+    ...c,
+    params: Array.isArray(c.params)
+      ? c.params.filter(
+          (p): p is ContractParam =>
+            Boolean(p) &&
+            isStr(p.function) &&
+            isStr(p.param) &&
+            isStr(p.type) &&
+            (p.kind === "payout" || p.kind === "recipient" || p.kind === "fee"),
+        )
+      : [],
+  }));
 
   return {
     summary: isSummary(f.summary) ? f.summary : null,
@@ -179,6 +222,7 @@ function readAll(userId: string): Project[] {
           source,
           brand: sanitizeBrand(p.brand, fallback),
           findings: sanitizeFindings(p.findings),
+          edits: sanitizeEdits(p.edits),
         },
       ];
     });
@@ -233,6 +277,7 @@ function defaultBrand(source: ProjectSource): Brand {
     chains: source.chains.map((c) => c.id),
     feeRecipient: "",
     feeBps: 0,
+    paramDefaults: {},
   };
 }
 
@@ -268,6 +313,7 @@ function buildFindings(result: AnalysisResult): Findings {
       chainId: c.chainId,
       chainName: c.chainName,
       address: c.address,
+      params: c.params,
     })),
     libraries: result.libraries,
     scriptsScanned: result.scriptsScanned,
@@ -302,6 +348,7 @@ export function saveAnalysis(userId: string, result: AnalysisResult): Project | 
     source,
     brand: defaultBrand(source),
     findings,
+    edits: {},
   };
   return saveProject(userId, project) ? project : null;
 }

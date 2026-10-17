@@ -84,7 +84,19 @@ html {
   animation: bar-shimmer 1.4s linear infinite;
 }
 
+/* Slow float for decorative marks on the new project page */
+@keyframes drift {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50% { transform: translateY(-12px) rotate(var(--r, 0deg)); }
+}
+
+.drift {
+  transform: rotate(var(--r, 0deg));
+  animation: drift 9s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .drift { animation: none; }
   .scan-beam { animation: none; top: 50%; }
   .chip-in { animation: none; }
   .bar-shimmer::after { animation: none; display: none; }

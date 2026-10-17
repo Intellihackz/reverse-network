@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 
 import LogoMark from "@/components/logo-mark";
@@ -34,7 +35,9 @@ function greeting() {
 }
 
 function downloadBackup(userId: string) {
-  const blob = new Blob([exportAllProjects(userId)], { type: "application/json" });
+  const blob = new Blob([exportAllProjects(userId)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -51,18 +54,19 @@ export default function DashboardHome() {
   const userId = user?.id ?? "";
   const name = firstName(user);
   // Only rendered after the sign-in gate, so reading storage never runs during SSR
-  const [projects, setProjects] = useState<Project[]>(() => (userId ? listProjects(userId) : []));
+  const [projects, setProjects] = useState<Project[]>(() =>
+    userId ? listProjects(userId) : [],
+  );
 
   function removeProject(project: Project) {
-    if (!window.confirm(`Delete ${project.brand.name || "this project"}? This can't be undone.`)) return;
+    if (
+      !window.confirm(
+        `Delete ${project.brand.name || "this project"}? This can't be undone.`,
+      )
+    )
+      return;
     deleteProject(userId, project.id);
     setProjects(listProjects(userId));
-  }
-
-  function focusInput() {
-    const input = document.getElementById("new-reverse-url");
-    input?.scrollIntoView({ behavior: "smooth", block: "center" });
-    input?.focus();
   }
 
   return (
@@ -71,27 +75,36 @@ export default function DashboardHome() {
         <h1 className="text-4xl font-semibold leading-[1.04] tracking-tighter sm:text-5xl lg:text-6xl">
           {greeting()}
           {name ? `, ${name}` : ""}
-          <span className="mt-1 block text-zinc-400">What will you rewind today?</span>
+          <span className="mt-1 block text-zinc-400">
+            What will you rewind today?
+          </span>
         </h1>
         <NewReverseForm />
       </section>
 
       <div className="mt-14 grid gap-4 md:grid-cols-3">
-        <section aria-labelledby="projects-heading" className={`${card} md:col-span-2`}>
+        <section
+          aria-labelledby="projects-heading"
+          className={`${card} md:col-span-2`}
+        >
           <div className="flex items-center justify-between">
             <h2 id="projects-heading" className={cardTitle}>
               Recent projects
             </h2>
-            <button
-              type="button"
-              onClick={focusInput}
+            <Link
+              href="/project/new"
               aria-label="Start a new project"
               className="rounded-full border border-zinc-200 p-2 text-zinc-600 transition-colors hover:border-ink hover:text-ink"
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2" strokeLinecap="round">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-4 w-4 fill-none stroke-current stroke-2"
+                strokeLinecap="round"
+              >
                 <path d="M12 5v14M5 12h14" />
               </svg>
-            </button>
+            </Link>
           </div>
           <div className="mt-4">
             <ProjectList projects={projects} onDelete={removeProject} />
@@ -107,8 +120,8 @@ export default function DashboardHome() {
             Back up your work
           </h2>
           <p className="relative mt-2 max-w-[16rem] text-sm leading-relaxed text-white/65">
-            Projects are saved in this browser only. Download a copy so clearing your
-            browser doesn&apos;t take them with it.
+            Projects are saved in this browser only. Download a copy so clearing
+            your browser doesn&apos;t take them with it.
           </p>
           <button
             type="button"
@@ -127,7 +140,8 @@ export default function DashboardHome() {
             Networks we read
           </h2>
           <p className="mt-2 text-sm text-zinc-500">
-            Contracts are looked up across these chains, then matched to verified source.
+            Contracts are looked up across these chains, then matched to
+            verified source.
           </p>
           <ul className="mt-5 flex flex-wrap gap-2">
             {SUPPORTED_CHAINS.map((chain) => (
@@ -135,7 +149,10 @@ export default function DashboardHome() {
                 key={chain.id}
                 className="flex items-center gap-2 rounded-full border border-zinc-200 px-3.5 py-1.5 text-sm font-medium"
               >
-                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-signal" />
+                <span
+                  aria-hidden="true"
+                  className="h-1.5 w-1.5 rounded-full bg-signal"
+                />
                 {chain.name}
               </li>
             ))}
@@ -155,7 +172,8 @@ export default function DashboardHome() {
             </span>
           </div>
           <p className="mt-2 max-w-sm text-sm text-zinc-500">
-            Turn a saved project into a live, wallet-ready site with your brand on it.
+            Turn a saved project into a live, wallet-ready site with your brand
+            on it.
           </p>
           <button
             type="button"

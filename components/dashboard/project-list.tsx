@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { BrandMark } from "@/components/dashboard/branded-preview";
+import { downloadBrandedApp } from "@/lib/export/download";
 import type { Project } from "@/lib/projects";
 
 function updatedLabel(timestamp: number) {
@@ -45,11 +46,22 @@ export default function ProjectList({
             </p>
           </div>
           <Link
-            href={`/dashboard/customize?project=${project.id}`}
+            href={`/project/${project.id}`}
             className="shrink-0 rounded-full bg-ink px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-signal hover:text-ink"
           >
             Open
           </Link>
+          <button
+            type="button"
+            onClick={() => downloadBrandedApp(project)}
+            aria-label={`Download ${project.brand.name || "project"} as an app`}
+            title="Download app"
+            className="shrink-0 rounded-full p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-ink"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />
+            </svg>
+          </button>
           <button
             type="button"
             onClick={() => onDelete(project)}

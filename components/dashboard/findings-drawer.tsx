@@ -301,7 +301,7 @@ export default function FindingsDrawer({
                 from your workspace to refresh them. Your branding stays as it is.
               </p>
               <Link
-                href={`/dashboard/analyze?url=${encodeURIComponent(source.url)}`}
+                href={`/project/analyze?url=${encodeURIComponent(source.url)}`}
                 className="mt-5 inline-flex rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-bold text-white hover:bg-zinc-800"
               >
                 Reverse it again

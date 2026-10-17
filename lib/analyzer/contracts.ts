@@ -1,6 +1,6 @@
 import { SUPPORTED_CHAINS, type SupportedChain } from "./chains";
 import type { AddressMention } from "./extract";
-import type { ContractInfo, FunctionInfo } from "./types";
+import type { ContractInfo, ContractParam, FunctionInfo } from "./types";
 
 const SOURCIFY = "https://sourcify.dev/server/v2/contract";
 const MAX_LOOKUPS = 80;
@@ -20,6 +20,7 @@ const ERC20_SELECTORS = ["a9059cbb", "70a08231", "095ea7b3"]; // transfer, balan
 const isTokenCode = (code: string) => ERC20_SELECTORS.every((sel) => code.includes(sel));
 
 interface AbiParam {
+  name?: string;
   type: string;
   components?: AbiParam[];
 }
@@ -134,6 +135,35 @@ function summarizeAbi(abi: AbiEntry[]): { functions: FunctionInfo[]; eventCount:
   };
 }
 
+const PAYOUT_NAME = /referr|feeto|feereceiver|feerecipient|treasury|collector|affiliate|partner|commission|payee/i;
+const RECIPIENT_NAME = /recipient|receiver|beneficiar/i;
+const FEE_NAME = /fee|bps|basispoint|commission|referr|affiliate/i;
+const MAX_PARAMS = 8;
+
+/** Finds inputs of state-changing functions that look like a payout address or a fee. */
+function detectParams(abi: AbiEntry[]): ContractParam[] {
+  const found: ContractParam[] = [];
+  for (const entry of abi) {
+    if (entry.type !== "function" || !entry.name) continue;
+    if (entry.stateMutability === "view" || entry.stateMutability === "pure") continue;
+    for (const input of entry.inputs ?? []) {
+      const name = input.name;
+      if (!name) continue;
+      if (input.type === "address" && PAYOUT_NAME.test(name)) {
+        found.push({ function: entry.name, param: name, type: input.type, kind: "payout" });
+      } else if (input.type === "address" && RECIPIENT_NAME.test(name)) {
+        found.push({ function: entry.name, param: name, type: input.type, kind: "recipient" });
+      } else if (/^u?int\d*$/.test(input.type) && FEE_NAME.test(name)) {
+        found.push({ function: entry.name, param: name, type: input.type, kind: "fee" });
+      }
+    }
+  }
+  const seen = new Set<string>();
+  return found
+    .filter((p) => !seen.has(p.function + ":" + p.param) && seen.add(p.function + ":" + p.param))
+    .slice(0, MAX_PARAMS);
+}
+
 function classify(abi: AbiEntry[] | undefined, isProxy: boolean): ContractInfo["kind"] {
   const names = new Set((abi ?? []).filter((e) => e.type === "function").map((e) => e.name));
   if (names.has("transfer") && names.has("balanceOf") && names.has("approve")) return "token";
@@ -211,6 +241,7 @@ export async function describeContracts(
       kind: "token" as const,
       implementation: null,
       functions: [],
+      params: [],
       eventCount: 0,
     }));
 
@@ -234,6 +265,7 @@ async function describePicked(
       kind: "contract",
       implementation: null,
       functions: [],
+      params: [],
       eventCount: 0,
     };
 
@@ -260,6 +292,8 @@ async function describePicked(
       kind: classify(abi, Boolean(impl)),
       implementation,
       functions,
+      // Token transfers all have a recipient, which says nothing about the protocol
+      params: classify(abi, Boolean(impl)) === "token" ? [] : detectParams(abi),
       eventCount,
     };
   };

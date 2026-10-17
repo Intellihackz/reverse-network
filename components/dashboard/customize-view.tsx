@@ -27,7 +27,7 @@ const label = "block text-sm font-semibold text-zinc-800";
 const input =
   "mt-2 w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-base text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-zinc-950";
 
-const SWATCHES = ["#111111", "#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#16a34a", "#0891b2"];
+export const SWATCHES = ["#111111", "#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#16a34a", "#0891b2"];
 const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 
 const FEASIBILITY_STYLE = {
@@ -36,7 +36,7 @@ const FEASIBILITY_STYLE = {
   hard: "bg-zinc-100 text-zinc-600",
 } as const;
 
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   legend,
   value,
   options,

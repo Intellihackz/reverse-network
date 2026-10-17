@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+
+import StageFrame from "@/components/project/stage-frame";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -9,15 +11,16 @@ import ScanStage, { type FoundItem, type Steps } from "@/components/dashboard/sc
 import type { AnalysisEvent, AnalysisResult, StepId } from "@/lib/analyzer/types";
 import { saveAnalysis } from "@/lib/projects";
 import { normalizeUrl } from "@/lib/url";
-import { cn } from "@/lib/utils";
 
 const STEP_IDS: StepId[] = ["fetch", "scan", "chains", "abis", "summary"];
 
 const freshSteps = (): Steps =>
   Object.fromEntries(STEP_IDS.map((id) => [id, { status: "pending" }])) as Steps;
 
-const eyebrow = "font-mono text-sm uppercase tracking-[0.2em] text-zinc-500";
-
+const eyebrow = "font-mono text-xs uppercase tracking-[0.22em] text-ink/70 sm:text-sm";
+const alertBox = "mt-8 w-full max-w-xl rounded-2xl bg-white px-5 py-4 text-left shadow-lg";
+const alertButton =
+  "mt-3 rounded-full bg-ink px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-signal hover:text-ink";
 /**
  * Scans a protocol and, when it finishes, opens the customize editor with a project
  * already created. The findings travel with the project and open from the editor.
@@ -87,7 +90,7 @@ export default function AnalyzeView() {
             setFound((prev) => [...prev.slice(-29), item]);
           } else if (event.type === "result") {
             const project = saveAnalysis(userId, event.data);
-            if (project) router.replace(`/dashboard/customize?project=${project.id}`);
+            if (project) router.replace(`/project/review?project=${project.id}`);
             else setUnsaved(event.data);
           } else {
             setError(event.message);
@@ -120,16 +123,13 @@ export default function AnalyzeView() {
 
   if (!target) {
     return (
-      <div>
-        <h1 className="text-5xl font-semibold tracking-tighter">No URL to reverse</h1>
-        <p className="mt-4 text-zinc-600">Paste a web3 app URL on your workspace to start.</p>
-        <Link
-          href="/dashboard"
-          className="mt-8 inline-flex rounded-full bg-zinc-950 px-6 py-3 text-base font-bold text-white hover:bg-zinc-800"
-        >
-          Back to workspace
+      <StageFrame>
+        <h1 className="text-5xl font-semibold tracking-tighter sm:text-7xl">No URL to reverse</h1>
+        <p className="mt-4 text-ink/75">Paste a web3 app URL to start.</p>
+        <Link href="/project/new" className={`${alertButton} mt-8 px-6 py-3 text-base`}>
+          Start a project
         </Link>
-      </div>
+      </StageFrame>
     );
   }
 
@@ -137,40 +137,26 @@ export default function AnalyzeView() {
   const failed = Boolean(error) || Boolean(unsaved);
 
   return (
-    <div className="w-full">
-      <Link
-        href="/dashboard"
-        className="text-sm font-semibold text-zinc-500 transition-colors hover:text-zinc-950"
-      >
-        &larr; Workspace
-      </Link>
-      <p className={cn(eyebrow, "mt-8")}>{failed ? "Couldn't finish" : "Reversing"}</p>
-      <h1 className="mt-3 break-all text-5xl font-semibold leading-[0.95] tracking-tighter sm:text-7xl">
+    <StageFrame>
+      <p className={eyebrow}>{failed ? "Couldn't finish" : "Reversing"}</p>
+      <h1 className="mt-3 mb-10 max-w-4xl break-all text-4xl font-semibold leading-[0.95] tracking-tighter sm:text-6xl">
         {host}
       </h1>
 
-      {!failed && (
-        <div className="mt-12">
-          <ScanStage host={host} steps={steps} found={found} />
-        </div>
-      )}
+      {!failed && <ScanStage host={host} steps={steps} found={found} />}
 
       {error && (
-        <div role="alert" className="mt-10 max-w-xl rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="font-semibold text-red-800">{error}</p>
-          <button
-            type="button"
-            onClick={() => setAttempt((n) => n + 1)}
-            className="mt-3 rounded-full border border-red-300 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100"
-          >
+        <div role="alert" className={alertBox}>
+          <p className="font-semibold text-red-700">{error}</p>
+          <button type="button" onClick={() => setAttempt((n) => n + 1)} className={alertButton}>
             Try again
           </button>
         </div>
       )}
 
       {unsaved && (
-        <div role="alert" className="mt-10 max-w-xl rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="font-semibold text-red-800">
+        <div role="alert" className={alertBox}>
+          <p className="font-semibold text-red-700">
             The scan worked, but your project couldn&apos;t be saved. Browser storage is full or
             blocked.
           </p>
@@ -178,14 +164,14 @@ export default function AnalyzeView() {
             type="button"
             onClick={() => {
               const project = saveAnalysis(userId, unsaved);
-              if (project) router.replace(`/dashboard/customize?project=${project.id}`);
+              if (project) router.replace(`/project/review?project=${project.id}`);
             }}
-            className="mt-3 rounded-full border border-red-300 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100"
+            className={alertButton}
           >
             Try saving again
           </button>
         </div>
       )}
-    </div>
+    </StageFrame>
   );
 }

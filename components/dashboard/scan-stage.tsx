@@ -50,10 +50,10 @@ export default function ScanStage({
   const recent = found.slice(-4);
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto w-full max-w-md text-left">
       <div
         aria-hidden="true"
-        className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_40px_80px_-40px_rgba(0,0,0,0.3)]"
+        className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.35)]"
       >
         <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
           <span className="flex gap-1.5">
@@ -106,14 +106,14 @@ export default function ScanStage({
         </div>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 px-1">
         <div
           role="progressbar"
           aria-label="Analysis progress"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress)}
-          className="h-1.5 overflow-hidden rounded-full bg-zinc-200"
+          className="h-1.5 overflow-hidden rounded-full bg-ink/15"
         >
           <div
             className="bar-shimmer h-full rounded-full bg-zinc-950 transition-[width] duration-700 ease-out"
@@ -124,11 +124,11 @@ export default function ScanStage({
           <p role="status" className="text-lg font-semibold">
             {label}&hellip;
           </p>
-          <p className="shrink-0 font-mono text-sm text-zinc-500">
+          <p className="shrink-0 font-mono text-sm text-ink/70">
             {Math.min(doneCount + (runningId ? 1 : 0), ORDER.length)}/{ORDER.length}
           </p>
         </div>
-        <p className="mt-1 min-h-5 truncate text-sm text-zinc-500">{detail}</p>
+        <p className="mt-1 min-h-5 truncate text-sm text-ink/70">{detail}</p>
       </div>
     </div>
   );
