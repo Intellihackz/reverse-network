@@ -35,6 +35,7 @@ Fill in `.env.local`:
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Your Privy app ID |
 | `PRIVY_VERIFICATION_KEY` | The Privy verification key (PEM, copied exactly, including the line breaks) |
 | `DATABASE_URL` | The Neon connection string |
+| `NEXT_PUBLIC_SITE_URL` | The live address, like `https://getreverse.xyz`. Used for link previews |
 | `ANTHROPIC_API_KEY` | Optional. Enables AI summaries |
 | `ANALYZE_RATE_LIMIT` | Optional. Scans per person per window |
 

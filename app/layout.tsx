@@ -21,7 +21,15 @@ const mono = Geist_Mono({
   display: "swap",
 });
 
+// Set NEXT_PUBLIC_SITE_URL to the live domain (https://getreverse.xyz) once it is attached.
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? "https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Reverse Network: Rewind any protocol. Make it yours.",
   description:
     "Paste a web3 app URL. We map its contracts, you brand it and launch your own version.",
