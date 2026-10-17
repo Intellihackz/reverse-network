@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BorderBeam } from "border-beam";
 
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { normalizeUrl } from "@/lib/url";
 import { cn } from "@/lib/utils";
 
 export default function UrlForm({ className }: { className?: string }) {
   const [value, setValue] = useState("");
   const router = useRouter();
+  const reducedMotion = usePrefersReducedMotion();
   const [status, setStatus] = useState<{ kind: "idle" } | { kind: "error" }>({
     kind: "idle",
   });
@@ -32,37 +35,47 @@ export default function UrlForm({ className }: { className?: string }) {
       <label htmlFor="protocol-url" className="sr-only">
         Web3 app URL
       </label>
-      <div
-        className={cn(
-          "flex flex-col gap-2 rounded-3xl border bg-white p-2 shadow-sm transition-colors sm:flex-row sm:rounded-full",
-          status.kind === "error"
-            ? "border-red-500"
-            : "border-zinc-300 focus-within:border-zinc-950",
-        )}
+      {/* The beam pauses on an error so the red border stays readable, and for reduced motion */}
+      <BorderBeam
+        size="md"
+        colorVariant="sunset"
+        theme="light"
+        strength={0.7}
+        borderRadius={28}
+        active={status.kind !== "error" && !reducedMotion}
       >
-        <input
-          id="protocol-url"
-          type="text"
-          inputMode="url"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="app.uniswap.org"
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            if (status.kind !== "idle") setStatus({ kind: "idle" });
-          }}
-          aria-invalid={status.kind === "error"}
-          aria-describedby="protocol-url-hint"
-          className="min-w-0 flex-1 bg-transparent px-5 py-3 font-mono text-base text-zinc-950 outline-none placeholder:text-zinc-400"
-        />
-        <button
-          type="submit"
-          className="rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors hover:bg-signal hover:text-ink"
+        <div
+          className={cn(
+            "flex flex-col gap-2 rounded-[28px] border bg-white p-2 shadow-sm transition-colors sm:flex-row",
+            status.kind === "error"
+              ? "border-red-500"
+              : "border-zinc-300 focus-within:border-zinc-950",
+          )}
         >
-          Reverse it
-        </button>
-      </div>
+          <input
+            id="protocol-url"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="app.uniswap.org"
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              if (status.kind !== "idle") setStatus({ kind: "idle" });
+            }}
+            aria-invalid={status.kind === "error"}
+            aria-describedby="protocol-url-hint"
+            className="min-w-0 flex-1 bg-transparent px-5 py-3 font-mono text-base text-zinc-950 outline-none placeholder:text-zinc-400"
+          />
+          <button
+            type="submit"
+            className="rounded-full bg-ink px-6 py-3 text-base font-bold text-white transition-colors hover:bg-signal hover:text-ink"
+          >
+            Reverse it
+          </button>
+        </div>
+      </BorderBeam>
       <p
         id="protocol-url-hint"
         role="status"
@@ -72,7 +85,8 @@ export default function UrlForm({ className }: { className?: string }) {
           status.kind === "error" ? "text-red-600" : "text-zinc-500",
         )}
       >
-        {status.kind === "error" && "Enter a valid web3 app URL, like app.uniswap.org."}
+        {status.kind === "error" &&
+          "Enter a valid web3 app URL, like app.uniswap.org."}
       </p>
     </form>
   );

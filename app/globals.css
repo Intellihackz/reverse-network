@@ -40,7 +40,9 @@ html {
   color: var(--color-ink);
 }
 
-:focus-visible {
+/* Keyboard focus ring for buttons, links and similar controls. Text fields are left out on
+   purpose: they draw their own focus border, and a ring around the typed text looks broken. */
+:where(a, button, summary, select, [role="radio"], [role="tab"]):focus-visible {
   outline: 2px solid var(--color-signal);
   outline-offset: 2px;
 }
