@@ -23,7 +23,7 @@ export default function SignInPage() {
           loop
           playsInline
           preload="auto"
-          poster="/hero-night-hills.png"
+          poster="/sign-in-poster.jpg"
         >
           <source src="/sign-in%20vid.mp4" type="video/mp4" />
         </video>
