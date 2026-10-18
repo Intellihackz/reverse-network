@@ -11,6 +11,7 @@ import "prismjs/components/prism-tsx";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-css";
 import "prismjs/components/prism-markdown";
+import "prismjs/components/prism-solidity";
 
 import type { CodeLanguage } from "@/lib/code-languages";
 
@@ -40,12 +41,14 @@ export default function CodeEditor({
   language,
   onChange,
   onFormat,
+  readOnly = false,
 }: {
   path: string;
   value: string;
   language: CodeLanguage;
   onChange: (value: string) => void;
   onFormat?: () => void;
+  readOnly?: boolean;
 }) {
   const gutter = useRef<HTMLPreElement>(null);
   const colored = useRef<HTMLPreElement>(null);
@@ -86,6 +89,7 @@ export default function CodeEditor({
           autoCapitalize="off"
           autoCorrect="off"
           wrap="off"
+          readOnly={readOnly}
           onChange={(e) => onChange(e.target.value)}
           onScroll={(e) => {
             const { scrollTop, scrollLeft } = e.currentTarget;
@@ -100,7 +104,12 @@ export default function CodeEditor({
             else if (e.altKey && e.shiftKey && e.key.toLowerCase() === "f") {
               e.preventDefault();
               onFormat?.();
-            } else if (e.key === "Tab" && !e.shiftKey && !escaped.current) {
+            } else if (
+              e.key === "Tab" &&
+              !readOnly &&
+              !e.shiftKey &&
+              !escaped.current
+            ) {
               e.preventDefault();
               const ta = e.currentTarget;
               ta.setRangeText("  ", ta.selectionStart, ta.selectionEnd, "end");

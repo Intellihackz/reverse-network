@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -11,7 +11,12 @@ import StageFrame from "@/components/project/stage-frame";
 import { useLoadedProject } from "@/components/project/use-loaded-project";
 import { languageOf } from "@/lib/code-languages";
 import { formatSource } from "@/lib/format-code";
+import {
+  buildContractFiles,
+  fetchContractBundle,
+} from "@/lib/export/contract-files";
 import { downloadBrandedApp } from "@/lib/export/download";
+import type { ZipEntry } from "@/lib/export/zip";
 import { generateFiles } from "@/lib/export/build-app";
 import { EDIT_LIMITS, type Project } from "@/lib/projects";
 import { useDebouncedSave } from "@/lib/use-debounced-save";
@@ -131,7 +136,39 @@ function Workspace({ initial }: { initial: Project }) {
   const closeFindings = useCallback(() => setShowFindings(false), []);
   const [formatError, setFormatError] = useState<string | null>(null);
 
-  const generated = useMemo(() => generateFiles(project), [project]);
+  // Verified source for each contract, loaded in the background and shown read-only
+  const [contracts, setContracts] = useState<{
+    status: "loading" | "ready" | "error";
+    files: ZipEntry[];
+  }>({ status: "loading", files: [] });
+  const [downloading, setDownloading] = useState(false);
+  const [downloadNote, setDownloadNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContractBundle(initial)
+      .then((bundle) => {
+        if (!cancelled)
+          setContracts({
+            status: "ready",
+            files: buildContractFiles(initial, bundle),
+          });
+      })
+      .catch(() => {
+        if (!cancelled) setContracts({ status: "error", files: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initial]);
+
+  const generated = useMemo(
+    () =>
+      [...generateFiles(project), ...contracts.files].sort((a, b) =>
+        a.path.localeCompare(b.path),
+      ),
+    [project, contracts.files],
+  );
   const base = useMemo(
     () => new Map(generated.map((f) => [f.path, f.content])),
     [generated],
@@ -150,6 +187,7 @@ function Workspace({ initial }: { initial: Project }) {
   );
 
   function setEdit(path: string, content: string) {
+    if (readOnly) return;
     const current = latest.current;
     const edits = { ...current.edits };
     if (content === base.get(path)) delete edits[path];
@@ -186,6 +224,7 @@ function Workspace({ initial }: { initial: Project }) {
     }
   }
   const language = languageOf(active);
+  const readOnly = active.startsWith("contracts/");
   const slug = project.brand.name || project.source.name;
 
   return (
@@ -236,12 +275,35 @@ function Workspace({ initial }: { initial: Project }) {
           </Link>
           <button
             type="button"
-            onClick={() => downloadBrandedApp(project)}
-            className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-signal hover:text-ink"
+            disabled={downloading}
+            onClick={async () => {
+              setDownloading(true);
+              setDownloadNote(null);
+              try {
+                const result = await downloadBrandedApp(project);
+                if (result.contractsFailed) {
+                  setDownloadNote(
+                    "Downloaded without the contracts folder: the contract sources couldn't be fetched.",
+                  );
+                }
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-signal hover:text-ink disabled:cursor-wait disabled:opacity-60"
           >
-            Download app
+            {downloading ? "Preparing..." : "Download app"}
           </button>
         </header>
+
+        {downloadNote && (
+          <p
+            role="alert"
+            className="border-b border-zinc-200 bg-amber-50 px-5 py-2 text-sm text-amber-900"
+          >
+            {downloadNote}
+          </p>
+        )}
 
         <FindingsDrawer
           open={showFindings}
@@ -261,6 +323,16 @@ function Workspace({ initial }: { initial: Project }) {
               edited={edited}
               onOpen={openFile}
             />
+            {contracts.status === "loading" && (
+              <p role="status" className="px-4 py-2 text-xs text-zinc-500">
+                Loading contract sources...
+              </p>
+            )}
+            {contracts.status === "error" && (
+              <p className="px-4 py-2 text-xs text-red-600">
+                Couldn&apos;t load the contract sources.
+              </p>
+            )}
           </nav>
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 py-12 text-center md:hidden">
             <svg
@@ -329,12 +401,14 @@ function Workspace({ initial }: { initial: Project }) {
               language={language}
               onChange={(value) => setEdit(active, value)}
               onFormat={() => void format()}
+              readOnly={readOnly}
             />
 
             <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/10 bg-zinc-900 px-4 py-2 font-mono text-xs text-zinc-400">
               <span className="truncate">{active}</span>
               <span>{language.label}</span>
-              {language.parser && (
+              {readOnly && <span>Read-only: published source</span>}
+              {language.parser && !readOnly && (
                 <button
                   type="button"
                   onClick={() => void format()}

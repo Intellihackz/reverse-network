@@ -12,6 +12,7 @@ const BY_EXTENSION: Record<string, CodeLanguage> = {
   mjs: { label: "JavaScript", prism: "javascript", parser: "babel" },
   json: { label: "JSON", prism: "json", parser: "json" },
   css: { label: "CSS", prism: "css", parser: "css" },
+  sol: { label: "Solidity", prism: "solidity", parser: null },
   md: { label: "Markdown", prism: "markdown", parser: "markdown" },
 };
 

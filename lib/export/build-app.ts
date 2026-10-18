@@ -1,5 +1,10 @@
 import { CHAIN_BY_ID } from "@/lib/analyzer/chains";
-import { EVM_ADDRESS, paramKey, type Project, readableTextOn } from "@/lib/projects";
+import {
+  EVM_ADDRESS,
+  paramKey,
+  type Project,
+  readableTextOn,
+} from "@/lib/projects";
 
 import { TEMPLATE_FILES } from "./templates";
 import type { ZipEntry } from "./zip";
@@ -8,17 +13,29 @@ const MAX_CONTRACTS = 40;
 
 export function appSlug(project: Project): string {
   const base = project.brand.name || project.source.name;
-  return base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "branded-app";
+  return (
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "branded-app"
+  );
 }
 
 /** Form values to prefill: what the user typed, else their payout address for fee and referral inputs. */
-function defaultsFor(project: Project, c: NonNullable<Project["findings"]>["contracts"][number]) {
+function defaultsFor(
+  project: Project,
+  c: NonNullable<Project["findings"]>["contracts"][number],
+) {
   const { feeRecipient, paramDefaults } = project.brand;
   const out: Record<string, string> = {};
   for (const p of c.params ?? []) {
-    const typed = paramDefaults[paramKey(c.chainId, c.address, p.function, p.param)]?.trim();
+    const typed =
+      paramDefaults[
+        paramKey(c.chainId, c.address, p.function, p.param)
+      ]?.trim();
     if (typed) out[p.function + ":" + p.param] = typed;
-    else if (p.kind === "payout" && EVM_ADDRESS.test(feeRecipient)) out[p.function + ":" + p.param] = feeRecipient;
+    else if (p.kind === "payout" && EVM_ADDRESS.test(feeRecipient))
+      out[p.function + ":" + p.param] = feeRecipient;
   }
   return out;
 }
@@ -26,7 +43,9 @@ function defaultsFor(project: Project, c: NonNullable<Project["findings"]>["cont
 /** Verified contracts first, then the rest, on the chains the user kept. */
 function pickContracts(project: Project) {
   const chains = new Set(project.brand.chains);
-  const all = (project.findings?.contracts ?? []).filter((c) => chains.has(c.chainId));
+  const all = (project.findings?.contracts ?? []).filter((c) =>
+    chains.has(c.chainId),
+  );
   return [...all.filter((c) => c.verified), ...all.filter((c) => !c.verified)]
     .slice(0, MAX_CONTRACTS)
     .map((c) => ({
@@ -56,7 +75,12 @@ export function buildConfig(project: Project) {
     source: { host: source.host, name: source.name },
     chains: [...CHAIN_BY_ID.values()]
       .filter((c) => chainIds.has(c.id))
-      .map((c) => ({ id: c.id, name: c.name, rpcUrl: c.rpcUrl, explorerUrl: c.explorerUrl })),
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        rpcUrl: c.rpcUrl,
+        explorerUrl: c.explorerUrl,
+      })),
     contracts: pickContracts(project),
   };
 }
@@ -107,25 +131,64 @@ export function generateFiles(project: Project): ZipEntry[] {
     version: "0.1.0",
     private: true,
     scripts: { dev: "next dev", build: "next build", start: "next start" },
-    dependencies: { next: "16.4.2", react: "19.3.0", "react-dom": "19.3.0", viem: "^2.21.0" },
-    devDependencies: { "@types/node": "^20", "@types/react": "^19", "@types/react-dom": "^19", typescript: "^5" },
+    dependencies: {
+      next: "16.4.2",
+      react: "19.3.0",
+      "react-dom": "19.3.0",
+      viem: "^2.21.0",
+    },
+    devDependencies: {
+      "@types/node": "^20",
+      "@types/react": "^19",
+      "@types/react-dom": "^19",
+      typescript: "^5",
+    },
   };
 
   return [
-    { path: "package.json", content: JSON.stringify(packageJson, null, 2) + "\n" },
-    { path: "reverse.config.json", content: JSON.stringify(config, null, 2) + "\n" },
-    { path: "README.md", content: readme(config.brand.name, project.source.host, config.contracts.length) },
-    ...Object.entries(TEMPLATE_FILES).map(([path, content]) => ({ path, content })),
+    {
+      path: "package.json",
+      content: JSON.stringify(packageJson, null, 2) + "\n",
+    },
+    {
+      path: "reverse.config.json",
+      content: JSON.stringify(config, null, 2) + "\n",
+    },
+    {
+      path: "README.md",
+      content: readme(
+        config.brand.name,
+        project.source.host,
+        config.contracts.length,
+      ),
+    },
+    ...Object.entries(TEMPLATE_FILES).map(([path, content]) => ({
+      path,
+      content,
+    })),
   ].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** Generated files with the user's edits applied. */
-export function currentFiles(project: Project): ZipEntry[] {
-  return generateFiles(project).map((f) => ({ ...f, content: project.edits[f.path] ?? f.content }));
+export function currentFiles(
+  project: Project,
+  extra: ZipEntry[] = [],
+): ZipEntry[] {
+  const own = generateFiles(project).map((f) => ({
+    ...f,
+    content: project.edits[f.path] ?? f.content,
+  }));
+  return [...own, ...extra].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** Files ready to zip, inside a folder named after the app. */
-export function buildAppFiles(project: Project): ZipEntry[] {
+export function buildAppFiles(
+  project: Project,
+  extra: ZipEntry[] = [],
+): ZipEntry[] {
   const slug = appSlug(project);
-  return currentFiles(project).map((f) => ({ ...f, path: slug + "/" + f.path }));
+  return currentFiles(project, extra).map((f) => ({
+    ...f,
+    path: slug + "/" + f.path,
+  }));
 }
