@@ -6,7 +6,7 @@ It does not copy the original app's screens. The app you download is a clean Nex
 
 ## How it works
 
-1. **Scan.** You paste a URL. The server fetches the page and its scripts, pulls out contract addresses, checks which ones are real contracts on five EVM chains (Ethereum, Base, Arbitrum, Optimism, Polygon), and loads verified ABIs from [Sourcify](https://sourcify.dev). It also reads the site's icon and drafts a plain summary of what the protocol does.
+1. **Scan.** You paste a URL. The server fetches the page and its scripts, pulls out contract addresses, checks which ones are real contracts on six EVM chains (Ethereum, Base, Arbitrum, Optimism, Polygon, Robinhood Chain), and loads verified ABIs from [Sourcify](https://sourcify.dev). It also reads the site's icon and drafts a plain summary of what the protocol does.
 2. **Review.** You set a name, tagline, logo, colors, font, corners and networks. If the contracts already have fee, referral or payout inputs, those show up as settings you can prefill.
 3. **Project.** Each project gets a page with a file explorer and editor for the generated app. Edits are saved to your account.
 4. **Download.** You get a zip: a branded Next.js app that loads each contract's ABI at run time and lets visitors read and write through their own wallet.

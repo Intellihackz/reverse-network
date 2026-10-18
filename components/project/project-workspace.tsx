@@ -6,8 +6,11 @@ import { useParams } from "next/navigation";
 
 import { BrandMark } from "@/components/dashboard/branded-preview";
 import FindingsDrawer from "@/components/dashboard/findings-drawer";
+import CodeEditor from "@/components/project/code-editor";
 import StageFrame from "@/components/project/stage-frame";
 import { useLoadedProject } from "@/components/project/use-loaded-project";
+import { languageOf } from "@/lib/code-languages";
+import { formatSource } from "@/lib/format-code";
 import { downloadBrandedApp } from "@/lib/export/download";
 import { generateFiles } from "@/lib/export/build-app";
 import { EDIT_LIMITS, type Project } from "@/lib/projects";
@@ -49,18 +52,6 @@ function buildTree(paths: string[]): TreeNode[] {
   order(root.children);
   return root.children;
 }
-
-const LANGUAGE: Record<string, string> = {
-  ts: "TypeScript",
-  tsx: "TypeScript React",
-  json: "JSON",
-  css: "CSS",
-  md: "Markdown",
-  mjs: "JavaScript",
-};
-
-const languageOf = (path: string) =>
-  LANGUAGE[path.split(".").pop() ?? ""] ?? "Plain text";
 
 function TreeView({
   nodes,
@@ -138,8 +129,7 @@ function Workspace({ initial }: { initial: Project }) {
   const [active, setActive] = useState(DEFAULT_FILE);
   const [showFindings, setShowFindings] = useState(false);
   const closeFindings = useCallback(() => setShowFindings(false), []);
-  const gutter = useRef<HTMLPreElement>(null);
-  const escaped = useRef(false);
+  const [formatError, setFormatError] = useState<string | null>(null);
 
   const generated = useMemo(() => generateFiles(project), [project]);
   const base = useMemo(
@@ -184,7 +174,18 @@ function Workspace({ initial }: { initial: Project }) {
   }
 
   const text = contentOf(active);
-  const lines = text.split("\n").length;
+
+  async function format() {
+    if (!language.parser) return;
+    setFormatError(null);
+    try {
+      const formatted = await formatSource(text, language);
+      if (formatted !== text) setEdit(active, formatted);
+    } catch {
+      setFormatError(active);
+    }
+  }
+  const language = languageOf(active);
   const slug = project.brand.name || project.source.name;
 
   return (
@@ -211,7 +212,7 @@ function Workspace({ initial }: { initial: Project }) {
             size={32}
             icon={project.source.icon}
           />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-28 flex-1">
             <h1 className="truncate text-base font-semibold leading-tight">
               {slug}
             </h1>
@@ -261,27 +262,28 @@ function Workspace({ initial }: { initial: Project }) {
               onOpen={openFile}
             />
           </nav>
-          <div className="border-b border-zinc-200 p-3 md:hidden">
-            <label htmlFor="file-select" className="sr-only">
-              File
-            </label>
-            <select
-              id="file-select"
-              value={active}
-              onChange={(e) => openFile(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono text-sm"
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 py-12 text-center md:hidden">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-10 w-10 fill-none stroke-zinc-400 stroke-[1.5]"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              {generated.map((f) => (
-                <option key={f.path} value={f.path}>
-                  {f.path}
-                </option>
-              ))}
-            </select>
+              <rect x="3" y="4" width="18" height="12" rx="2" />
+              <path d="M8 20h8M12 16v4" />
+            </svg>
+            <h2 className="text-lg font-semibold">Open this on a desktop</h2>
+            <p className="max-w-xs text-sm text-zinc-500">
+              The code view needs a bigger screen. Come back on a laptop or
+              desktop to browse and edit your app&apos;s files. You can still
+              download the app from here.
+            </p>
           </div>
 
           <section
             aria-label="Editor"
-            className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-950 text-zinc-100"
+            className="hidden min-h-0 min-w-0 flex-1 flex-col bg-zinc-950 text-zinc-100 md:flex"
           >
             <div
               role="tablist"
@@ -321,48 +323,32 @@ function Workspace({ initial }: { initial: Project }) {
               ))}
             </div>
 
-            <div className="flex min-h-0 flex-1">
-              <pre
-                ref={gutter}
-                aria-hidden="true"
-                className="m-0 w-12 shrink-0 select-none overflow-hidden bg-zinc-950 py-3 pr-3 text-right font-mono text-[13px] leading-5 text-zinc-600"
-              >
-                {Array.from({ length: lines }, (_, i) => i + 1).join("\n")}
-              </pre>
-              <textarea
-                key={active}
-                aria-label={"Edit " + active}
-                value={text}
-                spellCheck={false}
-                autoCapitalize="off"
-                autoCorrect="off"
-                wrap="off"
-                onChange={(e) => setEdit(active, e.target.value)}
-                onScroll={(e) => {
-                  if (gutter.current)
-                    gutter.current.scrollTop = e.currentTarget.scrollTop;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") escaped.current = true;
-                  else if (e.key === "Tab" && !e.shiftKey && !escaped.current) {
-                    e.preventDefault();
-                    const ta = e.currentTarget;
-                    ta.setRangeText(
-                      "  ",
-                      ta.selectionStart,
-                      ta.selectionEnd,
-                      "end",
-                    );
-                    setEdit(active, ta.value);
-                  } else if (e.key !== "Shift") escaped.current = false;
-                }}
-                className="min-w-0 flex-1 resize-none bg-zinc-950 py-3 pr-4 font-mono text-[13px] leading-5 text-zinc-100 outline-none"
-              />
-            </div>
+            <CodeEditor
+              path={active}
+              value={text}
+              language={language}
+              onChange={(value) => setEdit(active, value)}
+              onFormat={() => void format()}
+            />
 
             <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/10 bg-zinc-900 px-4 py-2 font-mono text-xs text-zinc-400">
               <span className="truncate">{active}</span>
-              <span>{languageOf(active)}</span>
+              <span>{language.label}</span>
+              {language.parser && (
+                <button
+                  type="button"
+                  onClick={() => void format()}
+                  title="Format file (Alt+Shift+F)"
+                  className="font-semibold text-zinc-200 hover:text-white hover:underline"
+                >
+                  Format
+                </button>
+              )}
+              {formatError === active && (
+                <span role="alert" className="text-red-400">
+                  Couldn&apos;t format: check the file for a syntax error.
+                </span>
+              )}
               {edited.has(active) && (
                 <button
                   type="button"

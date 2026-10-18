@@ -16,6 +16,7 @@ NEXT_PUBLIC_RPC_8453=
 NEXT_PUBLIC_RPC_42161=
 NEXT_PUBLIC_RPC_10=
 NEXT_PUBLIC_RPC_137=
+NEXT_PUBLIC_RPC_4663=
 `,
 
   "next.config.mjs": String.raw`/** @type {import('next').NextConfig} */
@@ -195,6 +196,7 @@ const RPC_OVERRIDES: Record<number, string | undefined> = {
   42161: process.env.NEXT_PUBLIC_RPC_42161,
   10: process.env.NEXT_PUBLIC_RPC_10,
   137: process.env.NEXT_PUBLIC_RPC_137,
+  4663: process.env.NEXT_PUBLIC_RPC_4663,
 };
 
 export const CHAINS: Chain[] = config.chains.map((c) =>

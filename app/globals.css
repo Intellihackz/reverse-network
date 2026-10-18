@@ -101,3 +101,37 @@ html {
   .chip-in { animation: none; }
   .bar-shimmer::after { animation: none; display: none; }
 }
+
+/* Syntax colors for the project code editor (Prism token classes) */
+.code-view .token.comment,
+.code-view .token.prolog,
+.code-view .token.doctype,
+.code-view .token.cdata { color: #7d8799; font-style: italic; }
+.code-view .token.punctuation { color: #aab2c0; }
+.code-view .token.property,
+.code-view .token.tag,
+.code-view .token.constant,
+.code-view .token.symbol,
+.code-view .token.deleted { color: #f07178; }
+.code-view .token.boolean,
+.code-view .token.number { color: #f78c6c; }
+.code-view .token.selector,
+.code-view .token.attr-name,
+.code-view .token.string,
+.code-view .token.char,
+.code-view .token.builtin,
+.code-view .token.inserted { color: #a5d17c; }
+.code-view .token.operator,
+.code-view .token.entity,
+.code-view .token.url { color: #89ddff; }
+.code-view .token.atrule,
+.code-view .token.attr-value,
+.code-view .token.keyword { color: #c792ea; }
+.code-view .token.function,
+.code-view .token.class-name { color: #82aaff; }
+.code-view .token.regex,
+.code-view .token.important,
+.code-view .token.variable { color: #ffcb6b; }
+.code-view .token.bold,
+.code-view .token.title { font-weight: 700; }
+.code-view .token.italic { font-style: italic; }
