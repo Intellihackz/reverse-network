@@ -30,6 +30,11 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  twitter: {
+    card: "summary_large_image",
+    site: "@reversenetwork_xyz",
+    creator: "@reversenetwork_xyz",
+  },
   title: "Reverse Network: Rewind any protocol. Make it yours.",
   description:
     "Paste a web3 app URL. We map its contracts, you brand it and launch your own version.",
